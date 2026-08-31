@@ -168,7 +168,7 @@ export default function HomePage() {
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             >
               <img
-                src="/mnc-logo.svg"
+                src="/mnc-logo.png"
                 alt="MNC Mid Night Coffee"
                 draggable={false}
                 className="w-48 h-48 object-contain"
