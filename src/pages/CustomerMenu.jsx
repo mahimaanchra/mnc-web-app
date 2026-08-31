@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { collection, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -9,6 +9,8 @@ import {
   Phone, Loader2, ReceiptText, TableProperties, Gift,
 } from "lucide-react";
 import { useLoyalty, STREAK_TARGET } from "../hooks/useLoyalty";
+import OrderTracker from "../components/OrderTracker";
+import OrderModificationSheet from "../components/OrderModificationSheet";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,138 @@ function cartTotal(cart) {
 }
 function cartCount(cart) {
   return Object.values(cart).reduce((s, e) => s + e.qty, 0);
+}
+
+// ─── Phone Gate Modal ─────────────────────────────────────────────────────────
+// Non-dismissible overlay shown on first visit (or if verifiedPhone is cleared).
+// Validates a 10-digit mobile number, persists it to localStorage, and calls
+// onVerified(phone) so the parent can immediately sync streak + order data.
+
+function PhoneGateModal({ onVerified }) {
+  const [phone,   setPhone]   = useState("");
+  const [error,   setError]   = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    const cleaned = phone.replace(/[^0-9]/g, "");
+    if (cleaned.length !== 10) {
+      setError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    setLoading(true);
+    // Persist immediately so every downstream read from localStorage is warm
+    localStorage.setItem("verifiedPhone", cleaned);
+    await onVerified(cleaned);
+    setLoading(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleSubmit();
+  };
+
+  return (
+    // Full-screen dark backdrop — pointer-events-all so nothing behind is tappable
+    <div className="fixed inset-0 z-[100] flex items-center justify-center
+                    bg-black/85 backdrop-blur-sm px-5">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.93, y: 24 }}
+        animate={{ opacity: 1, scale: 1,    y: 0  }}
+        transition={{ type: "spring", damping: 26, stiffness: 300 }}
+        className="w-full max-w-sm bg-[#1e1e1e] border border-[#2e2e2e]
+                   rounded-3xl overflow-hidden shadow-2xl"
+      >
+        {/* Top amber accent strip */}
+        <div className="h-1 w-full bg-gradient-to-r from-[#f5a623] via-amber-300 to-[#f5a623]" />
+
+        <div className="px-6 pt-7 pb-8 space-y-5">
+          {/* Icon + heading */}
+          <div className="flex flex-col items-center text-center gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-[#f5a623]/15 border border-[#f5a623]/30
+                            flex items-center justify-center">
+              <Phone size={26} className="text-[#f5a623]" />
+            </div>
+            <div>
+              <h2 className="text-white font-bold text-xl leading-tight">
+                Welcome to MNC ☕
+              </h2>
+              <p className="text-[#9a9a9a] text-sm mt-1.5 leading-relaxed">
+                Enter your mobile number to track orders,
+                earn loyalty rewards, and get your{" "}
+                <span className="text-[#f5a623] font-semibold">FREE Burger 🍔</span>{" "}
+                on every 7th order.
+              </p>
+            </div>
+          </div>
+
+          {/* Input */}
+          <div>
+            <label className="block text-xs font-semibold text-[#9a9a9a] mb-2 uppercase tracking-wide">
+              10-Digit Mobile Number
+            </label>
+            <div className="relative">
+              <Phone
+                size={15}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2
+                           text-[#9a9a9a] pointer-events-none"
+              />
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={phone}
+                onChange={(e) => { setPhone(e.target.value); setError(""); }}
+                onKeyDown={handleKeyDown}
+                placeholder="9876543210"
+                autoFocus
+                className="w-full bg-[#1a1a1a] border border-[#3a3a3a] text-white text-base
+                           placeholder-[#555] rounded-2xl pl-10 pr-4 py-3
+                           focus:outline-none focus:border-[#f5a623] transition-colors"
+              />
+            </div>
+            {error && (
+              <p className="text-red-400 text-xs mt-2 flex items-center gap-1.5">
+                <span className="inline-block w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />
+                {error}
+              </p>
+            )}
+          </div>
+
+          {/* Loyalty nudge */}
+          <div className="flex items-start gap-3 bg-[#f5a623]/8 border border-[#f5a623]/20
+                          rounded-2xl px-4 py-3">
+            <Gift size={16} className="text-[#f5a623] mt-0.5 flex-shrink-0" />
+            <p className="text-[#f5a623]/80 text-xs leading-relaxed">
+              Your streak is tied to this number. Order {STREAK_TARGET} times
+              and your next order includes a{" "}
+              <strong className="text-[#f5a623]">free MNC Special Burger</strong>!
+            </p>
+          </div>
+
+          {/* CTA */}
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading || phone.replace(/[^0-9]/g, "").length < 10}
+            className="w-full flex items-center justify-center gap-2
+                       bg-[#f5a623] hover:bg-[#e08a00]
+                       disabled:opacity-40 disabled:cursor-not-allowed
+                       text-[#1a1a1a] font-bold py-3.5 rounded-2xl text-sm
+                       transition-colors shadow-lg shadow-[#f5a623]/25
+                       active:scale-[0.98] min-h-[52px]"
+          >
+            {loading
+              ? <><Loader2 size={16} className="animate-spin" /> Setting up your account…</>
+              : <><CheckCircle2 size={16} /> Start Ordering</>}
+          </button>
+
+          <p className="text-[#555] text-[11px] text-center leading-relaxed">
+            Your number is only used for order tracking and loyalty rewards.
+            We never share it.
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
 }
 
 // ─── Streak Banner ─────────────────────────────────────────────────────────────
@@ -155,7 +289,7 @@ function ItemCard({ item, onAddToCart }) {
         }
         <span className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-[#f5a623]
                          text-xs font-semibold px-2.5 py-1 rounded-full border border-[#f5a623]/20">
-          {CATEGORY_EMOJI[item.category] ?? "🍽️"} {item.category}
+         {item.category}
         </span>
         {!item.inStock && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
@@ -231,8 +365,9 @@ function ItemCard({ item, onAddToCart }) {
             }}
             className="flex items-center gap-1.5 bg-[#f5a623] hover:bg-[#e08a00]
                        disabled:opacity-40 disabled:cursor-not-allowed
-                       text-[#1a1a1a] font-bold text-sm px-4 py-2 rounded-xl
-                       transition-colors shadow shadow-[#f5a623]/20">
+                       text-[#1a1a1a] font-bold text-sm px-4 py-2.5 rounded-xl
+                       transition-colors shadow shadow-[#f5a623]/20
+                       min-h-[44px] active:scale-95">
             <Plus size={15} />Add
           </button>
         </div>
@@ -244,15 +379,18 @@ function ItemCard({ item, onAddToCart }) {
 function CheckoutModal({
   cart, tableNumber, onUpdateQty, onClose, onOrderPlaced,
   completedOrders, fetchProfile, recordOrder,
+  prefilledPhone,   // already verified via PhoneGateModal — skips the phone step
 }) {
-  // If tableNumber prop is missing, start at a "table" step or handle it inside cart/phone
+  // If tableNumber prop is missing, start at "table" step.
+  // If phone is already verified (prefilledPhone), skip straight to "cart".
   const [step,          setStep]          = useState(!tableNumber ? "table" : "cart");
   const [localTable,    setLocalTable]    = useState(tableNumber || "");
   const [phone,         setPhone]         = useState("");
   const [phoneLoading,  setPhoneLoading]  = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [phoneError,    setPhoneError]    = useState("");
-  const [verifiedPhone, setVerifiedPhone] = useState("");
+  // Pre-fill verifiedPhone from the gate so checkout doesn't ask again
+  const [verifiedPhone, setVerifiedPhone] = useState(prefilledPhone ?? "");
   const [localCount,    setLocalCount]    = useState(completedOrders);
 
   const isThisOrderReward = localCount + 1 === STREAK_TARGET;
@@ -460,7 +598,11 @@ function CheckoutModal({
                   <span className="text-[#9a9a9a] text-sm">Total</span>
                   <span className="text-white font-bold text-xl">₹{total}</span>
                 </div>
-                <button onClick={() => setStep("phone")}
+                <button onClick={() => {
+                    // Phone already verified via gate — skip straight to confirm
+                    if (verifiedPhone) { setStep("confirm"); }
+                    else { setStep("phone"); }
+                  }}
                   className="w-full flex items-center justify-center gap-2
                              bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a]
                              font-bold py-3.5 rounded-xl text-sm transition-colors
@@ -539,7 +681,7 @@ function CheckoutModal({
           {step === "confirm" && (
             <>
               <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
-                <button onClick={() => setStep("phone")}
+                <button onClick={() => setStep(verifiedPhone && prefilledPhone ? "cart" : "phone")}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
                   <ArrowLeft size={18} />
                 </button>
@@ -731,13 +873,28 @@ export default function CustomerMenu() {
     recordOrder,
   } = useLoyalty();
 
-  const savedPhone = localStorage.getItem("verifiedPhone") ?? "";
+  // ── Single source of truth for the verified phone ──────────────────────────
+  // Initialised from localStorage so returning customers skip the gate immediately.
+  // Updated by PhoneGateModal.onVerified and by CheckoutModal when it saves a phone.
+  const [verifiedPhone, setVerifiedPhone] = useState(
+    () => localStorage.getItem("verifiedPhone") ?? "",
+  );
 
+  // Show gate if phone is still empty after mount
+  const phoneGateRequired = !verifiedPhone;
+
+  // Callback handed to PhoneGateModal — phone is already saved to localStorage
+  // by the time this fires; we just sync React state and kick off data fetches.
+  const handlePhoneVerified = useCallback(async (phone) => {
+    setVerifiedPhone(phone);
+    await fetchProfile(phone);
+  }, [fetchProfile]);
+
+  // Fetch loyalty profile whenever verifiedPhone becomes available
+  // (covers both the gate flow and returning visitors)
   useEffect(() => {
-    if (savedPhone) {
-      fetchProfile(savedPhone);
-    }
-  }, [savedPhone, fetchProfile]);
+    if (verifiedPhone) fetchProfile(verifiedPhone);
+  }, [verifiedPhone, fetchProfile]);
 
   const [items,          setItems]          = useState([]);
   const [loading,        setLoading]        = useState(true);
@@ -746,6 +903,9 @@ export default function CustomerMenu() {
   const [cartOpen,       setCartOpen]       = useState(false);
   const [checkoutOpen,   setCheckoutOpen]   = useState(false);
   const [showOutOfStock, setShowOutOfStock] = useState(true);
+
+  // ── Order tracking & live modification ─────────────────────────────────────
+  const [modifyingOrder, setModifyingOrder] = useState(null); // order doc to modify
 
   useEffect(() => {
     return onSnapshot(collection(db, "menu_items"), (snap) => {
@@ -802,6 +962,10 @@ export default function CustomerMenu() {
   return (
     <div className="min-h-screen bg-[#1a1a1a]">
 
+      {/* ── Phone Gate — blocks all interaction until a phone is provided ── */}
+      {phoneGateRequired && (
+        <PhoneGateModal onVerified={handlePhoneVerified} />
+      )}
       <header className="sticky top-0 z-30 bg-[#1a1a1a]/95 backdrop-blur border-b border-[#2e2e2e]">
         <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -839,8 +1003,9 @@ export default function CustomerMenu() {
             <div className="flex gap-1 px-4 py-2 w-max min-w-full">
               {allCategories.map((cat) => (
                 <button key={cat} onClick={() => setActiveCategory(cat)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg
                               text-xs font-semibold transition-colors whitespace-nowrap
+                              min-h-[36px]
                               ${activeCategory === cat
                                 ? "bg-[#f5a623] text-[#1a1a1a]"
                                 : "text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e]"}`}>
@@ -932,11 +1097,12 @@ export default function CustomerMenu() {
             exit={{ y: 80, opacity: 0 }}
             transition={{ type: "spring", damping: 22, stiffness: 260 }}
             className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40
-                       w-[calc(100%-2rem)] max-w-sm">
+                       w-[calc(100%-2rem)] max-w-sm pb-safe">
             <button onClick={() => setCartOpen(true)}
               className="w-full flex items-center justify-between
                          bg-[#f5a623] text-[#1a1a1a] font-bold
-                         px-5 py-3.5 rounded-2xl shadow-xl shadow-[#f5a623]/30">
+                         px-5 py-3.5 rounded-2xl shadow-xl shadow-[#f5a623]/30
+                         min-h-[52px]">
               <span className="bg-[#1a1a1a]/20 px-2 py-0.5 rounded-lg text-sm">
                 {count} item{count > 1 ? "s" : ""}
               </span>
@@ -971,9 +1137,10 @@ export default function CustomerMenu() {
             tableNumber={tableNumber}
             onUpdateQty={handleUpdateQty}
             onClose={() => setCheckoutOpen(false)}
+            prefilledPhone={verifiedPhone}
             onOrderPlaced={() => {
-              if (savedPhone) {
-                recordOrder(savedPhone);
+              if (verifiedPhone) {
+                recordOrder(verifiedPhone);
               }
               setCart({});
               setCheckoutOpen(false);
@@ -982,6 +1149,23 @@ export default function CustomerMenu() {
             completedOrders={completedOrders}
             fetchProfile={fetchProfile}
             recordOrder={recordOrder}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Order Tracker floating button + modal ── */}
+      <OrderTracker
+        phone={verifiedPhone}
+        onAddMore={(order) => setModifyingOrder(order)}
+      />
+
+      {/* ── Order Modification Sheet ── */}
+      <AnimatePresence>
+        {modifyingOrder && (
+          <OrderModificationSheet
+            order={modifyingOrder}
+            menuItems={items}
+            onClose={() => setModifyingOrder(null)}
           />
         )}
       </AnimatePresence>

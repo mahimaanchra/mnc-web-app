@@ -49,30 +49,75 @@ const STATUS_META = {
   Completed: { color: "bg-green-500/15 text-green-400 border-green-500/30",    icon: <CircleDollarSign size={13} /> },
 };
 
-// ─── Web Audio API Notification Helper ─────────────────────────────────────────
+// ─── Web Audio API — Singleton Context ────────────────────────────────────────
+// A single AudioContext is shared across all chime calls.
+// Browsers suspend AudioContext until a user gesture has occurred on the page.
+// We call ctx.resume() before each chime so it works even if the context was
+// auto-suspended after creation. This is the correct pattern for admin panels
+// that need to play sounds in response to Firestore push events (no gesture).
+
+let _audioCtx = null;
+
+function getAudioCtx() {
+  if (!_audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    _audioCtx = new AC();
+  }
+  return _audioCtx;
+}
+
+// Call this once on any user click to warm up the context before chimes fire.
+function resumeAudioCtx() {
+  const ctx = getAudioCtx();
+  if (ctx && ctx.state === "suspended") ctx.resume();
+}
 
 function playOrderChime() {
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
-
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.6);
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    ctx.resume().then(() => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.6);
+    });
   } catch (err) {
-    console.error("Audio playback restriction:", err);
+    console.error("playOrderChime error:", err);
+  }
+}
+
+// Double-pulse chime for modifications — two quick ascending triangle tones.
+function playModificationChime() {
+  try {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    ctx.resume().then(() => {
+      const playTone = (freq, startTime, duration) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(freq, startTime);
+        gain.gain.setValueAtTime(0.25, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+      playTone(660, ctx.currentTime,        0.18);
+      playTone(880, ctx.currentTime + 0.22, 0.18);
+    });
+  } catch (err) {
+    console.error("playModificationChime error:", err);
   }
 }
 
@@ -156,8 +201,8 @@ function DynamicPairList({ items, onChange, addLabel }) {
 function StatCard({ label, value, colorClasses }) {
   return (
     <div className={`rounded-xl border px-4 py-3 ${colorClasses}`}>
-      <p className="text-2xl font-bold">{value}</p>
-      <p className="text-xs font-medium opacity-75 mt-0.5">{label}</p>
+      <p className="text-2xl sm:text-3xl font-bold leading-tight">{value}</p>
+      <p className="text-xs sm:text-sm font-medium opacity-75 mt-0.5">{label}</p>
     </div>
   );
 }
@@ -245,83 +290,181 @@ function OrderCard({ order, onStatusChange, isUpdating }) {
   const nextIdx    = ORDER_STATUSES.indexOf(order.status) + 1;
   const nextStatus = ORDER_STATUSES[nextIdx] ?? null;
 
+  // ── Modification data (backward-compatible) ────────────────────────────────
+  const modifications = order.modifications ?? [];
+  const hasModification = order.hasModification && modifications.length > 0;
+
+  // Flatten all newly-added items for the badge summary (last batch only)
+  const lastMod = modifications.length > 0 ? modifications[modifications.length - 1] : null;
+  const lastModItems = lastMod?.items ?? [];
+
+  // Running total = base totalPrice (already incremented via Firestore increment)
+  const runningTotal = order.totalPrice ?? 0;
+
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-      className={`rounded-2xl border shadow-sm p-4 ${order.status === "Completed" ? "bg-gray-50/70 border-gray-200 opacity-80" : "bg-white border-gray-200"}`}
+      className={`rounded-2xl border shadow-sm overflow-hidden
+                  ${order.status === "Completed"
+                    ? "bg-gray-50/70 border-gray-200 opacity-80"
+                    : "bg-white border-gray-200"}`}
     >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-base font-bold text-gray-900">
-              Table {order.tableNumber ?? "—"}
-            </span>
-            {order.customerPhone && (
-              <span className="text-xs text-gray-400">· {order.customerPhone}</span>
-            )}
-            {order.isStreakOrder && (
-              <span className="text-[10px] font-black bg-amber-400 text-amber-950
-                               px-2 py-0.5 rounded-md leading-tight whitespace-nowrap">
-                🎁 STREAK #7
+      {/* ── Pulsing modification alert banner ── */}
+      {hasModification && order.status !== "Completed" && (
+        <div className="flex items-start gap-2.5 px-4 py-2.5
+                        bg-orange-50 border-b-2 border-orange-300
+                        animate-[pulse_2s_ease-in-out_infinite]">
+          <span className="text-lg leading-none flex-shrink-0 mt-0.5">⚠️</span>
+          <div className="min-w-0">
+            <p className="text-orange-700 text-xs font-black uppercase tracking-wide leading-tight">
+              Items Added by Customer
+            </p>
+            <p className="text-orange-600 text-xs mt-0.5 leading-snug">
+              {lastModItems.map((it, i) => (
+                <span key={i}>
+                  {i > 0 && ", "}
+                  <strong>{it.itemName}</strong> ×{it.qty}
+                </span>
+              ))}
+              {modifications.length > 1 && (
+                <span className="text-orange-400 ml-1">
+                  (+{modifications.length - 1} earlier batch{modifications.length > 2 ? "es" : ""})
+                </span>
+              )}
+            </p>
+          </div>
+          <span className="ml-auto flex-shrink-0 text-[10px] font-black text-orange-700
+                           bg-orange-200 border border-orange-300 px-2 py-0.5 rounded-full
+                           whitespace-nowrap">
+            KITCHEN: ACT NOW
+          </span>
+        </div>
+      )}
+
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-base font-bold text-gray-900">
+                Table {order.tableNumber ?? "—"}
+              </span>
+              {order.customerPhone && (
+                <span className="text-xs text-gray-600">· {order.customerPhone}</span>
+              )}
+              {order.isStreakOrder && (
+                <span className="text-[10px] font-black bg-amber-400 text-amber-950
+                                 px-2 py-0.5 rounded-md leading-tight whitespace-nowrap">
+                  🎁 STREAK #7
+                </span>
+              )}
+            </div>
+            <span className="text-xs text-gray-600">{timeAgo(order.createdAt)}</span>
+          </div>
+          <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1
+                            rounded-full border ${meta.color}`}>
+            {meta.icon}{order.status}
+          </span>
+        </div>
+
+        {/* ── Original items ── */}
+        <ul className="space-y-1.5 mb-3">
+          {order.items?.map((it, i) => (
+            <li key={i} className="flex justify-between text-sm gap-2">
+              <span className="text-gray-700 flex items-center gap-1.5 flex-wrap">
+                {it.qty}× {it.itemName}
+                {it.variantLabel && (
+                  <span className="text-gray-500">({it.variantLabel})</span>
+                )}
+                {it.isFreeStreak && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black
+                                   bg-amber-400 text-amber-950 px-2 py-0.5 rounded-md
+                                   leading-tight whitespace-nowrap">
+                    🎁 FREE — STREAK #7
+                  </span>
+                )}
+              </span>
+              <span className={`font-medium flex-shrink-0
+                                ${it.isFreeStreak ? "text-green-600" : "text-gray-600"}`}>
+                {it.isFreeStreak ? "FREE" : `₹${it.price * it.qty}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        {/* ── Add-on batches — flat dark blocks, clearly separated ── */}
+        {modifications.map((mod, mi) => (
+          <div key={mi} className="mb-3 rounded-xl bg-[#1a1a1a] overflow-hidden">
+            {/* Batch header row */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-[#f5a623]/20">
+              <span className="text-[10px] font-black text-[#f5a623] uppercase tracking-wider">
+                ✚ Customer Added
+                {mod.addedAt
+                  ? ` · ${mod.addedAt.toDate
+                      ? mod.addedAt.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      : new Date(mod.addedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : ""}
+              </span>
+              <span className="text-[10px] font-bold text-[#f5a623]">
+                +₹{mod.addedPrice ?? (mod.items ?? []).reduce((s, it) => s + it.price * it.qty, 0)}
+              </span>
+            </div>
+            {/* Batch items */}
+            <ul className="px-3 py-2 space-y-1">
+              {(mod.items ?? []).map((it, i) => (
+                <li key={i} className="flex justify-between text-sm gap-2">
+                  <span className="text-amber-200 font-semibold">
+                    {it.qty}× {it.itemName}
+                    {it.variantLabel && (
+                      <span className="font-normal text-amber-400/70 ml-1">
+                        ({it.variantLabel})
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[#f5a623] font-bold flex-shrink-0">
+                    ₹{it.price * it.qty}
+                  </span>
+                </li>
+              ))}
+              {mod.note && (
+                <li className="text-xs text-amber-400/50 italic mt-1">
+                  Note: "{mod.note}"
+                </li>
+              )}
+            </ul>
+          </div>
+        ))}
+
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+          <div>
+            <span className="text-xs text-gray-600 font-medium">{order.paymentMethod}</span>
+            <span className="ml-2 text-sm font-bold text-gray-900">₹{runningTotal}</span>
+            {hasModification && (
+              <span className="ml-1.5 text-[10px] font-semibold text-orange-500">
+                (incl. add-ons)
               </span>
             )}
           </div>
-          <span className="text-xs text-gray-400">{timeAgo(order.createdAt)}</span>
-        </div>
-        <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1
-                          rounded-full border ${meta.color}`}>
-          {meta.icon}{order.status}
-        </span>
-      </div>
-
-      <ul className="space-y-1.5 mb-3">
-        {order.items?.map((it, i) => (
-          <li key={i} className="flex justify-between text-sm gap-2">
-            <span className="text-gray-700 flex items-center gap-1.5 flex-wrap">
-              {it.qty}× {it.itemName}
-              {it.variantLabel && (
-                <span className="text-gray-400">({it.variantLabel})</span>
-              )}
-              {it.isFreeStreak && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-black
-                                 bg-amber-400 text-amber-950 px-2 py-0.5 rounded-md
-                                 leading-tight whitespace-nowrap">
-                  🎁 FREE — STREAK REWARD #7
-                </span>
-              )}
+          {nextStatus && order.status !== "Completed" ? (
+            <button
+              type="button"
+              onClick={() => onStatusChange(order.id, nextStatus)}
+              disabled={isUpdating}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600
+                         disabled:opacity-60 text-white text-xs font-semibold
+                         px-4 py-2.5 rounded-lg transition-colors
+                         min-h-[44px] active:scale-95"
+            >
+              {isUpdating
+                ? <Loader2 size={12} className="animate-spin" />
+                : <Check size={12} />}
+              Mark {nextStatus}
+            </button>
+          ) : (
+            <span className="text-xs text-green-700 font-bold flex items-center gap-1">
+              <CheckCircle2 size={13} /> Completed
             </span>
-            <span className={`font-medium flex-shrink-0
-                              ${it.isFreeStreak ? "text-green-600" : "text-gray-600"}`}>
-              {it.isFreeStreak ? "FREE" : `₹${it.price * it.qty}`}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-        <div>
-          <span className="text-xs text-gray-400">{order.paymentMethod}</span>
-          <span className="ml-2 text-sm font-bold text-gray-900">₹{order.totalPrice}</span>
+          )}
         </div>
-        {nextStatus && order.status !== "Completed" ? (
-          <button
-            type="button"
-            onClick={() => onStatusChange(order.id, nextStatus)}
-            disabled={isUpdating}
-            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600
-                       disabled:opacity-60 text-white text-xs font-semibold
-                       px-3 py-1.5 rounded-lg transition-colors"
-          >
-            {isUpdating
-              ? <Loader2 size={12} className="animate-spin" />
-              : <Check size={12} />}
-            Mark {nextStatus}
-          </button>
-        ) : (
-          <span className="text-xs text-green-600 font-semibold flex items-center gap-1">
-            <CheckCircle2 size={13} /> Completed
-          </span>
-        )}
       </div>
     </motion.div>
   );
@@ -376,6 +519,13 @@ export default function AdminMenu() {
             const newOrder = change.doc.data();
             if (newOrder.status === "Pending") {
               playOrderChime();
+            }
+          }
+          // Fire a distinct double-chime when a customer adds items to an existing order
+          if (change.type === "modified") {
+            const updatedOrder = change.doc.data();
+            if (updatedOrder.hasModification) {
+              playModificationChime();
             }
           }
         });
@@ -521,7 +671,7 @@ export default function AdminMenu() {
   const pendingCount = orders.filter((o) => o.status === "Pending").length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" onClick={resumeAudioCtx}>
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
@@ -561,7 +711,7 @@ export default function AdminMenu() {
         </div>
 
         {/* Tabs */}
-        <div className="border-t border-gray-100 px-4">
+        <div className="border-t border-gray-100 px-4 pb-safe">
           <div className="flex gap-1 max-w-6xl mx-auto">
             {[
               { id: "menu",   label: "Menu Items",  icon: <LayoutGrid size={14} /> },
@@ -570,7 +720,7 @@ export default function AdminMenu() {
             ].map((tab) => (
               <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)}
                 className={`relative flex items-center gap-1.5 px-4 py-3 text-sm font-semibold
-                            border-b-2 transition-colors
+                            border-b-2 transition-colors min-h-[48px]
                             ${activeTab === tab.id
                               ? "border-amber-500 text-amber-600"
                               : "border-transparent text-gray-500 hover:text-gray-700"}`}>
@@ -597,7 +747,6 @@ export default function AdminMenu() {
               <StatCard label="MNC Special"  value={items.filter((i) => i.isMncSpecial).length} colorClasses="bg-amber-50 text-amber-700 border-amber-100" />
               <StatCard label="Categories"   value={Object.keys(categoryCounts).length}     colorClasses="bg-purple-50 text-purple-700 border-purple-100" />
             </div>
-
             <AnimatePresence>
               {showForm && (
                 <motion.div ref={formTopRef} key="admin-form"
@@ -826,6 +975,10 @@ export default function AdminMenu() {
               <button type="button" onClick={() => playOrderChime()} title="Test Notification Chime"
                 className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl hover:bg-amber-100">
                 <Volume2 size={13} /> Test Sound
+              </button>
+              <button type="button" onClick={() => playModificationChime()} title="Test Modification Chime"
+                className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-xl hover:bg-orange-100">
+                <Volume2 size={13} /> Test Mod Sound
               </button>
             </div>
 

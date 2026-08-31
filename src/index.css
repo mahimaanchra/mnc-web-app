@@ -8,5 +8,34 @@
   body {
     @apply bg-[#1a1a1a] text-white;
     font-family: 'Inter', sans-serif;
+    /* Prevent grey flash on tap (iOS) */
+    -webkit-tap-highlight-color: transparent;
+    /* Smoother text on mobile OLED */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Make every interactive element at least 44 × 44 px (WCAG 2.5.5) */
+  button, [role="button"], a {
+    touch-action: manipulation;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Scoped override — inline icon-only buttons that are already sized by padding
+     can opt out of the 44px floor via the "btn-sm" utility */
+  .btn-sm {
+    min-height: unset;
+    min-width: unset;
+  }
+}
+
+@layer utilities {
+  /* Hides scrollbar cross-browser while keeping scroll behaviour */
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Respect iOS home-indicator safe area */
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+  .mb-safe { margin-bottom:  env(safe-area-inset-bottom, 16px); }
 }
