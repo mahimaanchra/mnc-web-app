@@ -810,10 +810,6 @@ export default function CustomerMenu() {
               <ArrowLeft size={18} />
             </Link>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-[#f5a623]
-                flex items-center justify-center shadow">
-                <Coffee size={15} className="text-[#1a1a1a]" />
-              </div>
               <div>
                 <h1 className="text-white font-bold text-base leading-tight">Mid Night Coffee</h1>
                 <p className="text-[#9a9a9a] text-xs">
