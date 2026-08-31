@@ -49,76 +49,100 @@ const STATUS_META = {
   Completed: { color: "bg-green-500/15 text-green-400 border-green-500/30",    icon: <CircleDollarSign size={13} /> },
 };
 
-// ─── Web Audio API — Singleton Context ────────────────────────────────────────
-// A single AudioContext is shared across all chime calls.
-// Browsers suspend AudioContext until a user gesture has occurred on the page.
-// We call ctx.resume() before each chime so it works even if the context was
-// auto-suspended after creation. This is the correct pattern for admin panels
-// that need to play sounds in response to Firestore push events (no gesture).
+// ─── Web Audio API — Singleton Context with Pending Queue ────────────────────
+// Strategy:
+//   - AudioContext is created on the FIRST user gesture (resumeAudioCtx), not
+//     lazily in playOrderChime. This guarantees it starts in "running" state.
+//   - Firestore-triggered chimes that arrive before any gesture are queued.
+//   - The queue is drained immediately when the user next clicks anything.
+//   - ctx.resume() is still called defensively before each tone.
 
-let _audioCtx = null;
+let _audioCtx    = null;
+let _pendingChime = null; // "order" | "modification" | null — last pending chime type
 
-function getAudioCtx() {
+function resumeAudioCtx() {
   if (!_audioCtx) {
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return null;
+    if (!AC) return;
     _audioCtx = new AC();
   }
-  return _audioCtx;
+  if (_audioCtx.state === "suspended") {
+    _audioCtx.resume().then(() => {
+      // Drain any queued chime now that the context is running
+      if (_pendingChime === "modification") _playModificationTones();
+      else if (_pendingChime === "order")   _playOrderTones();
+      _pendingChime = null;
+    });
+  } else {
+    // Context already running — still drain pending if any
+    if (_pendingChime === "modification") _playModificationTones();
+    else if (_pendingChime === "order")   _playOrderTones();
+    _pendingChime = null;
+  }
 }
 
-// Call this once on any user click to warm up the context before chimes fire.
-function resumeAudioCtx() {
-  const ctx = getAudioCtx();
-  if (ctx && ctx.state === "suspended") ctx.resume();
+function _playOrderTones() {
+  const ctx = _audioCtx;
+  if (!ctx) return;
+  try {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+  } catch (err) {
+    console.error("_playOrderTones error:", err);
+  }
+}
+
+function _playModificationTones() {
+  const ctx = _audioCtx;
+  if (!ctx) return;
+  try {
+    const playTone = (freq, startTime, duration) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, startTime);
+      gain.gain.setValueAtTime(0.25, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+    playTone(660, ctx.currentTime,        0.18);
+    playTone(880, ctx.currentTime + 0.22, 0.18);
+  } catch (err) {
+    console.error("_playModificationTones error:", err);
+  }
 }
 
 function playOrderChime() {
-  try {
-    const ctx = getAudioCtx();
-    if (!ctx) return;
-    ctx.resume().then(() => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.6);
-    });
-  } catch (err) {
-    console.error("playOrderChime error:", err);
+  const ctx = _audioCtx;
+  if (!ctx || ctx.state === "suspended") {
+    // No unlocked context yet — queue and wait for next user gesture
+    _pendingChime = "order";
+    return;
   }
+  _pendingChime = null;
+  ctx.resume().then(_playOrderTones).catch(console.error);
 }
 
-// Double-pulse chime for modifications — two quick ascending triangle tones.
 function playModificationChime() {
-  try {
-    const ctx = getAudioCtx();
-    if (!ctx) return;
-    ctx.resume().then(() => {
-      const playTone = (freq, startTime, duration) => {
-        const osc  = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "triangle";
-        osc.frequency.setValueAtTime(freq, startTime);
-        gain.gain.setValueAtTime(0.25, startTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(startTime);
-        osc.stop(startTime + duration);
-      };
-      playTone(660, ctx.currentTime,        0.18);
-      playTone(880, ctx.currentTime + 0.22, 0.18);
-    });
-  } catch (err) {
-    console.error("playModificationChime error:", err);
+  const ctx = _audioCtx;
+  if (!ctx || ctx.state === "suspended") {
+    _pendingChime = "modification";
+    return;
   }
+  _pendingChime = null;
+  ctx.resume().then(_playModificationTones).catch(console.error);
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -309,17 +333,16 @@ function OrderCard({ order, onStatusChange, isUpdating }) {
                     ? "bg-gray-50/70 border-gray-200 opacity-80"
                     : "bg-white border-gray-200"}`}
     >
-      {/* ── Pulsing modification alert banner ── */}
+      {/* ── Pulsing modification alert banner — calm amber, not alarming ── */}
       {hasModification && order.status !== "Completed" && (
         <div className="flex items-start gap-2.5 px-4 py-2.5
-                        bg-orange-50 border-b-2 border-orange-300
-                        animate-[pulse_2s_ease-in-out_infinite]">
-          <span className="text-lg leading-none flex-shrink-0 mt-0.5">⚠️</span>
-          <div className="min-w-0">
-            <p className="text-orange-700 text-xs font-black uppercase tracking-wide leading-tight">
+                        bg-amber-500/10 border-b border-amber-500/30">
+          <span className="text-base leading-none flex-shrink-0 mt-0.5">✚</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-amber-700 text-xs font-bold leading-tight">
               Items Added by Customer
             </p>
-            <p className="text-orange-600 text-xs mt-0.5 leading-snug">
+            <p className="text-amber-600 text-xs mt-0.5 leading-snug">
               {lastModItems.map((it, i) => (
                 <span key={i}>
                   {i > 0 && ", "}
@@ -327,16 +350,16 @@ function OrderCard({ order, onStatusChange, isUpdating }) {
                 </span>
               ))}
               {modifications.length > 1 && (
-                <span className="text-orange-400 ml-1">
-                  (+{modifications.length - 1} earlier batch{modifications.length > 2 ? "es" : ""})
+                <span className="text-amber-400 ml-1">
+                  +{modifications.length - 1} more batch{modifications.length > 2 ? "es" : ""}
                 </span>
               )}
             </p>
           </div>
-          <span className="ml-auto flex-shrink-0 text-[10px] font-black text-orange-700
-                           bg-orange-200 border border-orange-300 px-2 py-0.5 rounded-full
-                           whitespace-nowrap">
-            KITCHEN: ACT NOW
+          <span className="flex-shrink-0 text-[10px] font-bold text-amber-700
+                           bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full
+                           whitespace-nowrap self-start">
+            New Add-on
           </span>
         </div>
       )}
@@ -434,12 +457,12 @@ function OrderCard({ order, onStatusChange, isUpdating }) {
           </div>
         ))}
 
-        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-          <div>
-            <span className="text-xs text-gray-600 font-medium">{order.paymentMethod}</span>
-            <span className="ml-2 text-sm font-bold text-gray-900">₹{runningTotal}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-100">
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span className="text-xs text-gray-600 font-medium truncate">{order.paymentMethod}</span>
+            <span className="text-sm font-bold text-gray-900 flex-shrink-0">₹{runningTotal}</span>
             {hasModification && (
-              <span className="ml-1.5 text-[10px] font-semibold text-orange-500">
+              <span className="text-[10px] font-semibold text-amber-600 flex-shrink-0">
                 (incl. add-ons)
               </span>
             )}
@@ -452,7 +475,7 @@ function OrderCard({ order, onStatusChange, isUpdating }) {
               className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600
                          disabled:opacity-60 text-white text-xs font-semibold
                          px-4 py-2.5 rounded-lg transition-colors
-                         min-h-[44px] active:scale-95"
+                         min-h-[44px] active:scale-95 flex-shrink-0 ml-auto"
             >
               {isUpdating
                 ? <Loader2 size={12} className="animate-spin" />
@@ -460,7 +483,7 @@ function OrderCard({ order, onStatusChange, isUpdating }) {
               Mark {nextStatus}
             </button>
           ) : (
-            <span className="text-xs text-green-700 font-bold flex items-center gap-1">
+            <span className="text-xs text-green-700 font-bold flex items-center gap-1 flex-shrink-0 ml-auto">
               <CheckCircle2 size={13} /> Completed
             </span>
           )}
@@ -972,11 +995,11 @@ export default function AdminMenu() {
                   <Archive size={13} /> Completed History ({historyOrders.length})
                 </button>
               </div>
-              <button type="button" onClick={() => playOrderChime()} title="Test Notification Chime"
+              <button type="button" onClick={() => { resumeAudioCtx(); playOrderChime(); }} title="Test Notification Chime"
                 className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl hover:bg-amber-100">
                 <Volume2 size={13} /> Test Sound
               </button>
-              <button type="button" onClick={() => playModificationChime()} title="Test Modification Chime"
+              <button type="button" onClick={() => { resumeAudioCtx(); playModificationChime(); }} title="Test Modification Chime"
                 className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-xl hover:bg-orange-100">
                 <Volume2 size={13} /> Test Mod Sound
               </button>

@@ -7,6 +7,7 @@ import {
    ShoppingCart, Plus, Minus, X, UtensilsCrossed,
   PackageX, ArrowLeft, CheckCircle2, ChevronRight,
   Phone, Loader2, ReceiptText, TableProperties, Gift,
+  ClipboardList,
 } from "lucide-react";
 import { useLoyalty, STREAK_TARGET } from "../hooks/useLoyalty";
 import OrderTracker from "../components/OrderTracker";
@@ -381,9 +382,25 @@ function CheckoutModal({
   completedOrders, fetchProfile, recordOrder,
   prefilledPhone,   // already verified via PhoneGateModal — skips the phone step
 }) {
-  // If tableNumber prop is missing, start at "table" step.
-  // If phone is already verified (prefilledPhone), skip straight to "cart".
-  const [step,          setStep]          = useState(!tableNumber ? "table" : "cart");
+  // Determine the saved order mode from localStorage
+  const savedMode = localStorage.getItem("orderMode"); // "dine-in" | "takeaway" | null
+
+  // Step flow:
+  //   "mode"  → ask Dine-In or Takeaway (skip if orderMode already saved)
+  //   "table" → ask table number (dine-in only, skip if tableNumber already known)
+  //   "cart"  → review order
+  //   "phone" → enter phone (skip if prefilledPhone is set)
+  //   "confirm" → final confirmation
+  //   "success" → done
+  const deriveInitialStep = () => {
+    if (!savedMode) return "mode";               // never chosen — ask first
+    if (savedMode === "takeaway") return "cart"; // takeaway: no table needed
+    if (tableNumber)             return "cart";  // dine-in with table already set
+    return "table";                              // dine-in but no table yet
+  };
+
+  const [step,          setStep]          = useState(deriveInitialStep);
+  const [orderMode,     setOrderMode]     = useState(savedMode || "");  // "dine-in" | "takeaway"
   const [localTable,    setLocalTable]    = useState(tableNumber || "");
   const [phone,         setPhone]         = useState("");
   const [phoneLoading,  setPhoneLoading]  = useState(false);
@@ -392,6 +409,24 @@ function CheckoutModal({
   // Pre-fill verifiedPhone from the gate so checkout doesn't ask again
   const [verifiedPhone, setVerifiedPhone] = useState(prefilledPhone ?? "");
   const [localCount,    setLocalCount]    = useState(completedOrders);
+
+  const handleModeSelect = (mode) => {
+    setOrderMode(mode);
+    localStorage.setItem("orderMode", mode);
+    if (mode === "takeaway") {
+      // Wipe any stale table from a previous dine-in session
+      localStorage.removeItem("tableNumber");
+      setLocalTable("");
+      setStep("cart");
+    } else {
+      // Dine-in: if we already have a table number, skip straight to cart
+      if (localTable) {
+        setStep("cart");
+      } else {
+        setStep("table");
+      }
+    }
+  };
 
   const isThisOrderReward = localCount + 1 === STREAK_TARGET;
 
@@ -437,7 +472,8 @@ function CheckoutModal({
       }));
 
       await addDoc(collection(db, "orders"), {
-        tableNumber:      localTable || "—",
+        tableNumber:      orderMode === "takeaway" ? "Takeaway" : (localTable || "—"),
+        orderMode:        orderMode || "dine-in",
         items:            orderItems,
         totalPrice:       total,
         status:           "Pending",
@@ -452,8 +488,11 @@ function CheckoutModal({
         await recordOrder(verifiedPhone);
       }
 
-      if (localTable) {
+      if (orderMode === "dine-in" && localTable) {
         localStorage.setItem("tableNumber", localTable);
+      } else if (orderMode === "takeaway") {
+        // Takeaway: wipe any stale table so next dine-in starts fresh
+        localStorage.removeItem("tableNumber");
       }
 
       setStep("success");
@@ -488,12 +527,59 @@ function CheckoutModal({
         <div className="bg-[#1e1e1e] border border-[#2e2e2e] rounded-2xl w-full max-w-md
                         shadow-2xl pointer-events-auto overflow-hidden">
 
-          {/* ── STEP: Table Number Entry (if missing) ── */}
-          {step === "table" && (
+          {/* ── STEP: Dine-In or Takeaway ── */}
+          {step === "mode" && (
             <>
               <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
-                <h2 className="text-white font-bold flex items-center gap-2">
-                  <TableProperties size={18} className="text-[#f5a623]" /> Enter Table Number
+                <h2 className="text-white font-bold text-sm">How are you ordering?</h2>
+                <button onClick={onClose}
+                  className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="px-5 py-6 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleModeSelect("dine-in")}
+                  className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2
+                             border-[#3a3a3a] hover:border-[#f5a623] bg-[#242424]
+                             hover:bg-[#f5a623]/10 transition-all active:scale-95"
+                >
+                  <span className="text-3xl">🪑</span>
+                  <div className="text-center">
+                    <p className="text-white font-bold text-sm">Dine-In</p>
+                    <p className="text-[#9a9a9a] text-xs mt-0.5">Sit at a table</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleModeSelect("takeaway")}
+                  className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2
+                             border-[#3a3a3a] hover:border-[#f5a623] bg-[#242424]
+                             hover:bg-[#f5a623]/10 transition-all active:scale-95"
+                >
+                  <span className="text-3xl">🛍️</span>
+                  <div className="text-center">
+                    <p className="text-white font-bold text-sm">Takeaway</p>
+                    <p className="text-[#9a9a9a] text-xs mt-0.5">Pick up &amp; go</p>
+                  </div>
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── STEP: Table Number Entry (dine-in only) ── */}
+          {step === "table" && (
+            <>
+              <div className="flex items-center gap-2 px-5 py-4 border-b border-[#2e2e2e]">
+                <button onClick={() => setStep("mode")}
+                  className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
+                  <ArrowLeft size={16} />
+                </button>
+                <h2 className="text-white font-bold flex items-center gap-2 flex-1">
+                  <TableProperties size={16} className="text-[#f5a623]" /> Enter Table Number
                 </h2>
                 <button onClick={onClose}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
@@ -529,17 +615,22 @@ function CheckoutModal({
             <>
               <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
                 <div className="flex items-center gap-2">
-                  {!tableNumber && (
-                    <button onClick={() => setStep("table")}
-                      className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
-                      <ArrowLeft size={16} />
-                    </button>
-                  )}
-                  <h2 className="text-white font-bold flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (orderMode === "takeaway") setStep("mode");
+                      else if (!tableNumber) setStep("table");
+                      else setStep("mode");
+                    }}
+                    className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
+                    <ArrowLeft size={16} />
+                  </button>
+                  <h2 className="text-white font-bold flex items-center gap-2 flex-wrap">
                     <ReceiptText size={18} className="text-[#f5a623]" />
                     Review Order
-                    <span className="text-xs font-medium text-[#f5a623] ml-1">
-                      · Table {localTable || "—"}
+                    <span className="text-xs font-medium text-[#f5a623]">
+                      {orderMode === "takeaway"
+                        ? "· 🛍️ Takeaway"
+                        : localTable ? `· Table ${localTable}` : ""}
                     </span>
                   </h2>
                 </div>
@@ -712,8 +803,12 @@ function CheckoutModal({
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl p-3">
-                    <p className="text-[#9a9a9a] text-xs mb-0.5">Table</p>
-                    <p className="text-white font-bold text-lg">{localTable || "—"}</p>
+                    <p className="text-[#9a9a9a] text-xs mb-0.5">
+                      {orderMode === "takeaway" ? "Mode" : "Table"}
+                    </p>
+                    <p className="text-white font-bold text-lg">
+                      {orderMode === "takeaway" ? "🛍️ Takeaway" : (localTable || "—")}
+                    </p>
                   </div>
                   <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl p-3">
                     <p className="text-[#9a9a9a] text-xs mb-0.5">Total</p>
@@ -762,8 +857,17 @@ function CheckoutModal({
                 Your order is being prepared. Please pay at the counter when ready.
               </p>
               <div className="mt-4 bg-[#242424] border border-[#2e2e2e] rounded-xl px-5 py-3">
-                <p className="text-[#9a9a9a] text-xs">Table Number</p>
-                <p className="text-[#f5a623] font-bold text-2xl">{localTable}</p>
+                {orderMode === "takeaway" ? (
+                  <>
+                    <p className="text-[#9a9a9a] text-xs">Order Type</p>
+                    <p className="text-[#f5a623] font-bold text-2xl">🛍️ Takeaway</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[#9a9a9a] text-xs">Table Number</p>
+                    <p className="text-[#f5a623] font-bold text-2xl">{localTable}</p>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -906,6 +1010,7 @@ export default function CustomerMenu() {
 
   // ── Order tracking & live modification ─────────────────────────────────────
   const [modifyingOrder, setModifyingOrder] = useState(null); // order doc to modify
+  const [trackerOpen,    setTrackerOpen]    = useState(false); // controls My Orders sheet
 
   useEffect(() => {
     return onSnapshot(collection(db, "menu_items"), (snap) => {
@@ -983,19 +1088,34 @@ export default function CustomerMenu() {
             </div>
           </div>
 
-          <button onClick={() => setCartOpen(true)}
-            className="relative flex items-center gap-2 bg-[#242424] hover:bg-[#2e2e2e]
-                       border border-[#2e2e2e] hover:border-[#f5a623]/40
-                       text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-            <ShoppingCart size={16} className="text-[#f5a623]" />
-            Cart
-            {count > 0 && (
-              <span className="absolute -top-2 -right-2 w-5 h-5 bg-[#f5a623] text-[#1a1a1a]
-                               text-xs font-bold rounded-full flex items-center justify-center">
-                {count}
-              </span>
+          <div className="flex items-center gap-2">
+            {/* My Orders — only visible after phone is verified */}
+            {verifiedPhone && (
+              <button
+                onClick={() => setTrackerOpen(true)}
+                className="relative flex items-center gap-1.5 bg-[#242424] hover:bg-[#2e2e2e]
+                           border border-[#2e2e2e] hover:border-[#f5a623]/40
+                           text-white text-sm font-semibold px-3 py-2 rounded-xl transition-colors"
+              >
+                <ClipboardList size={15} className="text-[#f5a623]" />
+                <span className="hidden sm:inline text-xs">Orders</span>
+              </button>
             )}
-          </button>
+
+            <button onClick={() => setCartOpen(true)}
+              className="relative flex items-center gap-2 bg-[#242424] hover:bg-[#2e2e2e]
+                         border border-[#2e2e2e] hover:border-[#f5a623]/40
+                         text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+              <ShoppingCart size={16} className="text-[#f5a623]" />
+              <span className="hidden xs:inline">Cart</span>
+              {count > 0 && (
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-[#f5a623] text-[#1a1a1a]
+                                 text-xs font-bold rounded-full flex items-center justify-center">
+                  {count}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         {!loading && categories.length > 0 && (
@@ -1096,8 +1216,9 @@ export default function CustomerMenu() {
             initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ type: "spring", damping: 22, stiffness: 260 }}
-            className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40
-                       w-[calc(100%-2rem)] max-w-sm pb-safe">
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40
+                       w-[calc(100%-2rem)] max-w-sm"
+            style={{ bottom: "max(24px, env(safe-area-inset-bottom, 24px))" }}>
             <button onClick={() => setCartOpen(true)}
               className="w-full flex items-center justify-between
                          bg-[#f5a623] text-[#1a1a1a] font-bold
@@ -1142,6 +1263,9 @@ export default function CustomerMenu() {
               if (verifiedPhone) {
                 recordOrder(verifiedPhone);
               }
+              // Wipe session so next visit starts at mode selection
+              localStorage.removeItem("orderMode");
+              localStorage.removeItem("tableNumber");
               setCart({});
               setCheckoutOpen(false);
               setCartOpen(false);
@@ -1153,10 +1277,12 @@ export default function CustomerMenu() {
         )}
       </AnimatePresence>
 
-      {/* ── Order Tracker floating button + modal ── */}
+      {/* ── Order Tracker modal (opened via header button) ── */}
       <OrderTracker
         phone={verifiedPhone}
-        onAddMore={(order) => setModifyingOrder(order)}
+        open={trackerOpen}
+        onOpenChange={setTrackerOpen}
+        onAddMore={(order) => { setTrackerOpen(false); setModifyingOrder(order); }}
       />
 
       {/* ── Order Modification Sheet ── */}
