@@ -184,7 +184,7 @@ export default function HomePage() {
             >
               <p
                 className="font-cinzel text-[10px] tracking-[0.38em] font-bold uppercase mt-2 mb-3
-                           text-amber-500/80"
+                           text-amber-400/80"
               >
                 COFFEE &nbsp;|&nbsp; CHAT &nbsp;|&nbsp; CONNECT
               </p>
@@ -200,7 +200,7 @@ export default function HomePage() {
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.22 }}
                     className="w-full flex items-center justify-center gap-2.5 mt-3
-                               bg-amber-500/8 border border-amber-500/25
+                               bg-amber-400/8 border border-amber-500/25
                                rounded-xl px-3.5 py-2.5"
                   >
                     <MapPin size={14} className="text-amber-400 flex-shrink-0" />
@@ -219,7 +219,7 @@ export default function HomePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.26, duration: 0.36 }}
             >
-              <p className="text-[9px] font-bold tracking-[0.3em] text-amber-500/40
+              <p className="text-[9px] font-bold tracking-[0.3em] text-amber-500/55
                             uppercase mb-3 text-center font-cinzel">
                 How would you like to order?
               </p>
@@ -245,7 +245,7 @@ export default function HomePage() {
                   </div>
                   <div>
                     <p className="text-white font-bold text-sm leading-tight font-cinzel">Dine-In</p>
-                    <p className="text-amber-500/45 text-[10px] mt-0.5">
+                    <p className="text-amber-500/55 text-[10px] mt-0.5">
                       {hasTable ? `Table ${tableNumber} ✓` : "Select a table"}
                     </p>
                   </div>
@@ -256,7 +256,7 @@ export default function HomePage() {
                   whileTap={{ scale: 0.95 }}
                   onClick={goTakeaway}
                   className="group flex flex-col items-start gap-2.5 p-4 rounded-2xl
-                             text-left border border-amber-500/15
+                             text-left border border-amber-500/25
                              hover:border-amber-500/35 transition-colors duration-200"
                   style={{ background: "rgba(245,158,11,0.02)" }}
                 >
@@ -270,7 +270,7 @@ export default function HomePage() {
                   </div>
                   <div>
                     <p className="text-white font-bold text-sm leading-tight font-cinzel">Takeaway</p>
-                    <p className="text-amber-500/35 text-[10px] mt-0.5">Order &amp; collect</p>
+                    <p className="text-amber-500/55 text-[10px] mt-0.5">Order &amp; collect</p>
                   </div>
                 </motion.button>
               </div>
@@ -316,7 +316,7 @@ export default function HomePage() {
     whileTap={{ scale: 0.97 }}
     onClick={goSpecials}
     className="w-full flex items-center justify-between
-               bg-amber-400 hover:bg-amber-300
+               bg-amber-300 hover:bg-amber-400
                text-black font-black text-[12px] tracking-wide
                py-3 px-4 rounded-xl transition-all duration-200
                shadow-[0_4px_16px_rgba(251,191,36,0.3)]"
@@ -360,8 +360,8 @@ export default function HomePage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 flex items-center justify-center gap-1.5
-                           border border-amber-500/20 hover:border-amber-500/40
-                           text-amber-500/55 hover:text-amber-400
+                           border border-amber-500/20 hover:border-amber-400/70
+                           text-amber-500/70 hover:text-amber-400
                            text-[10px] font-bold tracking-wider
                            py-2.5 rounded-xl transition-colors"
                 style={{ background: "rgba(245,158,11,0.04)" }}
@@ -376,8 +376,8 @@ export default function HomePage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 flex items-center justify-center gap-1.5
-                           border border-amber-500/20 hover:border-amber-500/40
-                           text-amber-500/55 hover:text-amber-400
+                           border border-amber-500/20 hover:border-amber-400/70
+                           text-amber-500/70 hover:text-amber-400
                            text-[10px] font-bold tracking-wider
                            py-2.5 rounded-xl transition-colors"
                 style={{ background: "rgba(245,158,11,0.04)" }}
