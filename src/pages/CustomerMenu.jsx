@@ -4,7 +4,7 @@ import { collection, onSnapshot, addDoc, serverTimestamp } from "firebase/firest
 import { db } from "../firebase/config";
 import { useLocation, Link } from "react-router-dom";
 import {
-  Coffee, ShoppingCart, Plus, Minus, X, UtensilsCrossed,
+   ShoppingCart, Plus, Minus, X, UtensilsCrossed,
   PackageX, ArrowLeft, CheckCircle2, ChevronRight,
   Phone, Loader2, ReceiptText, TableProperties, Gift,
 } from "lucide-react";
