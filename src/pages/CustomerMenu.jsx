@@ -146,7 +146,7 @@ function ItemCard({ item, onAddToCart }) {
       className={`bg-[#242424] border rounded-2xl overflow-hidden flex flex-col
                   ${item.inStock ? "border-[#2e2e2e]" : "border-[#2e2e2e] opacity-60"}`}
     >
-      <div className="relative h-44 bg-[#1e1e1e] overflow-hidden flex-shrink-0">
+      <div className="relative h-44 bg-[#1e1e1e] overflow-hidden flex-shrink-0 ">
         {item.imageUrl && !imgErr
           ? <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover"
               onError={() => setImgErr(true)} />
@@ -240,26 +240,23 @@ function ItemCard({ item, onAddToCart }) {
     </motion.div>
   );
 }
-
 // ─── Checkout Modal ────────────────────────────────────────────────────────────
-// Steps: "cart" → "phone" → "confirm" → "success"
-
 function CheckoutModal({
   cart, tableNumber, onUpdateQty, onClose, onOrderPlaced,
   completedOrders, fetchProfile, recordOrder,
 }) {
-  const [step,          setStep]          = useState("cart");
+  // If tableNumber prop is missing, start at a "table" step or handle it inside cart/phone
+  const [step,          setStep]          = useState(!tableNumber ? "table" : "cart");
+  const [localTable,    setLocalTable]    = useState(tableNumber || "");
   const [phone,         setPhone]         = useState("");
   const [phoneLoading,  setPhoneLoading]  = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [phoneError,    setPhoneError]    = useState("");
   const [verifiedPhone, setVerifiedPhone] = useState("");
-  // Local loyalty count after fetching for this phone — drives isThisOrderReward
   const [localCount,    setLocalCount]    = useState(completedOrders);
 
   const isThisOrderReward = localCount + 1 === STREAK_TARGET;
 
-  // Build the effective cart: if this is the 7th order, inject the free burger
   const effectiveCart = isThisOrderReward
     ? { ...cart, [FREE_BURGER_KEY]: { ...FREE_BURGER_ENTRY } }
     : cart;
@@ -267,7 +264,6 @@ function CheckoutModal({
   const entries = Object.entries(effectiveCart);
   const total   = cartTotal(effectiveCart);
 
-  // ── Handle direct phone entry & fetch profile ──
   const handlePhoneSubmit = async () => {
     setPhoneError("");
     const cleaned = phone.replace(/[^0-9]/g, "");
@@ -289,7 +285,6 @@ function CheckoutModal({
     }
   };
 
-  // ── Place Order → write Firestore order doc, then update loyalty ──
   const handlePlaceOrder = async () => {
     setSubmitting(true);
     try {
@@ -304,7 +299,7 @@ function CheckoutModal({
       }));
 
       await addDoc(collection(db, "orders"), {
-        tableNumber:      tableNumber || "—",
+        tableNumber:      localTable || "—",
         items:            orderItems,
         totalPrice:       total,
         status:           "Pending",
@@ -314,10 +309,13 @@ function CheckoutModal({
         createdAt:        serverTimestamp(),
       });
 
-      // Update loyalty profile (increment or 1-order-per-day restriction)
       if (verifiedPhone) {
         localStorage.setItem("verifiedPhone", verifiedPhone);
         await recordOrder(verifiedPhone);
+      }
+
+      if (localTable) {
+        localStorage.setItem("tableNumber", localTable);
       }
 
       setStep("success");
@@ -352,19 +350,61 @@ function CheckoutModal({
         <div className="bg-[#1e1e1e] border border-[#2e2e2e] rounded-2xl w-full max-w-md
                         shadow-2xl pointer-events-auto overflow-hidden">
 
+          {/* ── STEP: Table Number Entry (if missing) ── */}
+          {step === "table" && (
+            <>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
+                <h2 className="text-white font-bold flex items-center gap-2">
+                  <TableProperties size={18} className="text-[#f5a623]" /> Enter Table Number
+                </h2>
+                <button onClick={onClose}
+                  className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="px-5 py-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-[#9a9a9a] mb-1.5">
+                    Table Number 
+                  </label>
+                  <input type="number" value={localTable}
+                    onChange={(e) => setLocalTable(e.target.value)}
+                    placeholder="Enter your table no."
+                    className="w-full bg-[#1a1a1a] border border-[#3a3a3a] text-white
+                               placeholder-[#555] rounded-xl px-4 py-2.5 text-sm
+                               focus:outline-none focus:border-[#f5a623] transition-colors" />
+                </div>
+
+                <button onClick={() => setStep("cart")} disabled={!localTable.trim()}
+                  className="w-full flex items-center justify-center gap-2
+                             bg-[#f5a623] hover:bg-[#e08a00] disabled:opacity-50
+                             text-[#1a1a1a] font-bold py-3 rounded-xl text-sm transition-colors">
+                  Continue <ChevronRight size={15} />
+                </button>
+              </div>
+            </>
+          )}
+
           {/* ── STEP: cart review ── */}
           {step === "cart" && (
             <>
               <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
-                <h2 className="text-white font-bold flex items-center gap-2">
-                  <ReceiptText size={18} className="text-[#f5a623]" />
-                  Review Order
-                  {tableNumber && (
-                    <span className="text-xs font-medium text-[#9a9a9a] ml-1">
-                      · Table {tableNumber}
-                    </span>
+                <div className="flex items-center gap-2">
+                  {!tableNumber && (
+                    <button onClick={() => setStep("table")}
+                      className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
+                      <ArrowLeft size={16} />
+                    </button>
                   )}
-                </h2>
+                  <h2 className="text-white font-bold flex items-center gap-2">
+                    <ReceiptText size={18} className="text-[#f5a623]" />
+                    Review Order
+                    <span className="text-xs font-medium text-[#f5a623] ml-1">
+                      · Table {localTable || "—"}
+                    </span>
+                  </h2>
+                </div>
                 <button onClick={onClose}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
                   <X size={18} />
@@ -390,7 +430,6 @@ function CheckoutModal({
                       </div>
                       <p className="text-[#9a9a9a] text-xs">{entry.variantLabel}</p>
                     </div>
-                    {/* Don't show qty controls for the free streak item */}
                     {!entry.isFreeStreak ? (
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <button onClick={() => onUpdateQty(key, -1)}
@@ -432,7 +471,7 @@ function CheckoutModal({
             </>
           )}
 
-          {/* ── STEP: phone entry (Direct input without OTP) ── */}
+          {/* ── STEP: phone entry ── */}
           {step === "phone" && (
             <>
               <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
@@ -473,18 +512,15 @@ function CheckoutModal({
                       maxLength={10}
                       className="w-full bg-[#1a1a1a] border border-[#3a3a3a] text-white
                                  placeholder-[#555] rounded-xl pl-9 pr-4 py-2.5 text-sm
-                                 focus:outline-none focus:border-[#f5a623] focus:ring-1
-                                 focus:ring-[#f5a623]/40 transition-colors" />
+                                 focus:outline-none focus:border-[#f5a623] transition-colors" />
                   </div>
                   {phoneError && <p className="text-red-400 text-xs mt-1.5">{phoneError}</p>}
                 </div>
 
                 <button onClick={handlePhoneSubmit} disabled={phoneLoading || !phone.trim()}
                   className="w-full flex items-center justify-center gap-2
-                             bg-[#f5a623] hover:bg-[#e08a00]
-                             disabled:opacity-50 disabled:cursor-not-allowed
-                             text-[#1a1a1a] font-bold py-3 rounded-xl text-sm
-                             transition-colors shadow-lg shadow-[#f5a623]/20">
+                             bg-[#f5a623] hover:bg-[#e08a00] disabled:opacity-50
+                             text-[#1a1a1a] font-bold py-3 rounded-xl text-sm transition-colors">
                   {phoneLoading
                     ? <><Loader2 size={15} className="animate-spin" /> Verifying…</>
                     : <>Continue <ChevronRight size={15} /></>}
@@ -517,14 +553,9 @@ function CheckoutModal({
               </div>
 
               <div className="px-5 py-5 space-y-4">
-                {/* Streak reward callout */}
                 {isThisOrderReward && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="flex items-center gap-3 bg-amber-500/12 border border-amber-400/40
-                               rounded-xl px-4 py-3"
-                  >
+                  <div className="flex items-center gap-3 bg-amber-500/12 border border-amber-400/40
+                               rounded-xl px-4 py-3">
                     <span className="text-2xl flex-shrink-0">🎉</span>
                     <div>
                       <p className="text-amber-300 font-bold text-sm leading-tight">
@@ -534,13 +565,13 @@ function CheckoutModal({
                         MNC Special Burger added to your order for FREE!
                       </p>
                     </div>
-                  </motion.div>
+                  </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl p-3">
                     <p className="text-[#9a9a9a] text-xs mb-0.5">Table</p>
-                    <p className="text-white font-bold text-lg">{tableNumber || "Walk-in"}</p>
+                    <p className="text-white font-bold text-lg">{localTable || "—"}</p>
                   </div>
                   <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl p-3">
                     <p className="text-[#9a9a9a] text-xs mb-0.5">Total</p>
@@ -555,9 +586,6 @@ function CheckoutModal({
                     <span className="text-green-400 text-xs font-medium">
                       Number: {verifiedPhone}
                     </span>
-                    <span className="ml-auto text-amber-400/70 text-xs font-semibold">
-                      Streak: {localCount}/{STREAK_TARGET - 1}
-                    </span>
                   </div>
                 )}
 
@@ -566,25 +594,14 @@ function CheckoutModal({
                   <p className="text-white text-sm font-semibold">💵 Pay at Counter</p>
                 </div>
 
-                {phoneError && (
-                  <p className="text-red-400 text-xs bg-red-900/20 border border-red-800/30
-                                rounded-lg px-3 py-2">⚠ {phoneError}</p>
-                )}
-
                 <button onClick={handlePlaceOrder} disabled={submitting}
                   className="w-full flex items-center justify-center gap-2
-                             bg-[#f5a623] hover:bg-[#e08a00]
-                             disabled:opacity-60 disabled:cursor-not-allowed
-                             text-[#1a1a1a] font-bold py-3.5 rounded-xl text-sm
-                             transition-colors shadow-lg shadow-[#f5a623]/20">
+                             bg-[#f5a623] hover:bg-[#e08a00] disabled:opacity-60
+                             text-[#1a1a1a] font-bold py-3.5 rounded-xl text-sm transition-colors">
                   {submitting
                     ? <><Loader2 size={15} className="animate-spin" /> Placing Order…</>
                     : <>Place Order <ChevronRight size={16} /></>}
                 </button>
-
-                <p className="text-[#555] text-xs text-center">
-                  Your order will be prepared right away. Pay at the counter when ready.
-                </p>
               </div>
             </>
           )}
@@ -592,27 +609,20 @@ function CheckoutModal({
           {/* ── STEP: success ── */}
           {step === "success" && (
             <div className="px-6 py-10 flex flex-col items-center text-center">
-              <motion.div
-                initial={{ scale: 0 }} animate={{ scale: 1 }}
-                transition={{ type: "spring", damping: 12, stiffness: 200 }}
-                className="w-20 h-20 rounded-full bg-green-500/20 border-2 border-green-500/40
+              <div className="w-20 h-20 rounded-full bg-green-500/20 border-2 border-green-500/40
                            flex items-center justify-center mb-5">
                 <CheckCircle2 size={40} className="text-green-400" />
-              </motion.div>
+              </div>
               <h2 className="text-white font-bold text-xl mb-2">
                 {isThisOrderReward ? "🎉 Free Burger Claimed!" : "Order Placed! 🎉"}
               </h2>
               <p className="text-[#9a9a9a] text-sm leading-relaxed max-w-xs">
-                {isThisOrderReward
-                  ? "Your 7th order reward has been applied. Enjoy your FREE MNC Special Burger!"
-                  : "Your order is being prepared. Please pay at the counter when ready."}
+                Your order is being prepared. Please pay at the counter when ready.
               </p>
-              {tableNumber && (
-                <div className="mt-4 bg-[#242424] border border-[#2e2e2e] rounded-xl px-5 py-3">
-                  <p className="text-[#9a9a9a] text-xs">Table Number</p>
-                  <p className="text-[#f5a623] font-bold text-2xl">{tableNumber}</p>
-                </div>
-              )}
+              <div className="mt-4 bg-[#242424] border border-[#2e2e2e] rounded-xl px-5 py-3">
+                <p className="text-[#9a9a9a] text-xs">Table Number</p>
+                <p className="text-[#f5a623] font-bold text-2xl">{localTable}</p>
+              </div>
             </div>
           )}
         </div>
@@ -707,7 +717,6 @@ function CartDrawer({ cart, onUpdateQty, onClose, onCheckout }) {
 export default function CustomerMenu() {
   const location = useLocation();
 
-  // Read ?table=N
   const tableNumber = (() => {
     const p = new URLSearchParams(location.search).get("table");
     return p ?? localStorage.getItem("tableNumber") ?? "";
@@ -716,18 +725,14 @@ export default function CustomerMenu() {
     if (tableNumber) localStorage.setItem("tableNumber", tableNumber);
   }, [tableNumber]);
 
-  // Loyalty hook — lives here so the banner always has fresh state
   const {
     completedOrders,
-    isRewardOrder,
     fetchProfile,
     recordOrder,
   } = useLoyalty();
 
-  // Derive phone from localStorage (set after entering phone in a previous session)
   const savedPhone = localStorage.getItem("verifiedPhone") ?? "";
 
-  // Pre-load loyalty for returning customers who have a saved phone
   useEffect(() => {
     if (savedPhone) {
       fetchProfile(savedPhone);
@@ -742,7 +747,6 @@ export default function CustomerMenu() {
   const [checkoutOpen,   setCheckoutOpen]   = useState(false);
   const [showOutOfStock, setShowOutOfStock] = useState(true);
 
-  // ── Firestore menu listener ──
   useEffect(() => {
     return onSnapshot(collection(db, "menu_items"), (snap) => {
       setItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -750,12 +754,13 @@ export default function CustomerMenu() {
     });
   }, []);
 
-  // ── Derived ──
   const categories    = getOrderedCategories(items);
   const allCategories = ["All", ...categories];
 
   const queryParam = new URLSearchParams(location.search).get("filter");
- const visibleItems = items.filter((item) => {
+
+  // Fixed filtering logic to cleanly handle both special filters and category tabs
+  const visibleItems = items.filter((item) => {
     const matchFilter = queryParam === "special"
       ? (item.special || item.isMncSpecial)
       : (activeCategory === "All" || item.category === activeCategory);
@@ -764,15 +769,14 @@ export default function CustomerMenu() {
     return matchFilter && matchStock;
   });
 
-  const groupedItems = activeCategory === "All"
+  const groupedItems = activeCategory === "All" && queryParam !== "special"
     ? categories.reduce((acc, cat) => {
         const ci = visibleItems.filter((i) => i.category === cat);
         if (ci.length) acc[cat] = ci;
         return acc;
       }, {})
-    : { [activeCategory]: visibleItems };
+    : { [activeCategory === "All" && queryParam === "special" ? "Special Offers" : activeCategory]: visibleItems };
 
-  // ── Cart actions ──
   const handleAddToCart = ({ itemId, itemName, variantLabel, price, addons }) => {
     const key = cartKey(itemId, variantLabel);
     setCart((prev) => ({
@@ -793,21 +797,11 @@ export default function CustomerMenu() {
     });
   };
 
-  const handleOrderPlaced = () => {
-    if (savedPhone) {
-      recordOrder(savedPhone);
-    }
-    setCart({});
-    setCheckoutOpen(false);
-    setCartOpen(false);
-  };
-
   const count = cartCount(cart);
 
   return (
     <div className="min-h-screen bg-[#1a1a1a]">
 
-      {/* ── Header ── */}
       <header className="sticky top-0 z-30 bg-[#1a1a1a]/95 backdrop-blur border-b border-[#2e2e2e]">
         <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -844,7 +838,6 @@ export default function CustomerMenu() {
           </button>
         </div>
 
-        {/* Category tabs */}
         {!loading && categories.length > 0 && (
           <div className="border-t border-[#2e2e2e] overflow-x-auto scrollbar-hide">
             <div className="flex gap-1 px-4 py-2 w-max min-w-full">
@@ -863,15 +856,12 @@ export default function CustomerMenu() {
         )}
       </header>
 
-      {/* ── Streak Banner (shown whenever we have a count to display) ── */}
       {!loading && (
         <StreakBanner completedOrders={completedOrders} />
       )}
 
-      {/* ── Content ── */}
       <main className="max-w-5xl mx-auto px-4 py-4">
 
-        {/* Out-of-stock toggle */}
         {!loading && items.length > 0 && (
           <div className="flex items-center justify-end mb-4">
             <button onClick={() => setShowOutOfStock((v) => !v)}
@@ -884,7 +874,6 @@ export default function CustomerMenu() {
           </div>
         )}
 
-        {/* Skeleton */}
         {loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -900,7 +889,6 @@ export default function CustomerMenu() {
           </div>
         )}
 
-        {/* Empty state */}
         {!loading && items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-28 text-center">
             <div className="w-20 h-20 rounded-2xl bg-[#242424] border border-[#2e2e2e]
@@ -914,7 +902,6 @@ export default function CustomerMenu() {
           </div>
         )}
 
-        {/* No filter results */}
         {!loading && items.length > 0 && visibleItems.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <PackageX size={40} className="text-[#3a3a3a] mb-3" />
@@ -922,10 +909,9 @@ export default function CustomerMenu() {
           </div>
         )}
 
-        {/* Item groups */}
         {!loading && Object.entries(groupedItems).map(([cat, catItems]) => (
           <div key={cat} className="mb-10">
-            {activeCategory === "All" && (
+            {activeCategory === "All" && queryParam !== "special" && (
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-xl">{CATEGORY_EMOJI[cat] ?? "🍽️"}</span>
                 <h2 className="text-white font-bold text-lg">{cat}</h2>
@@ -943,7 +929,6 @@ export default function CustomerMenu() {
         ))}
       </main>
 
-      {/* ── Sticky cart bar ── */}
       <AnimatePresence>
         {count > 0 && !cartOpen && !checkoutOpen && (
           <motion.div
@@ -966,7 +951,6 @@ export default function CustomerMenu() {
         )}
       </AnimatePresence>
 
-      {/* ── Cart drawer + backdrop ── */}
       <AnimatePresence>
         {cartOpen && (
           <>
@@ -984,7 +968,6 @@ export default function CustomerMenu() {
         )}
       </AnimatePresence>
 
-      {/* ── Checkout modal ── */}
       <AnimatePresence>
         {checkoutOpen && (
           <CheckoutModal
@@ -992,7 +975,14 @@ export default function CustomerMenu() {
             tableNumber={tableNumber}
             onUpdateQty={handleUpdateQty}
             onClose={() => setCheckoutOpen(false)}
-            onOrderPlaced={handleOrderPlaced}
+            onOrderPlaced={() => {
+              if (savedPhone) {
+                recordOrder(savedPhone);
+              }
+              setCart({});
+              setCheckoutOpen(false);
+              setCartOpen(false);
+            }}
             completedOrders={completedOrders}
             fetchProfile={fetchProfile}
             recordOrder={recordOrder}

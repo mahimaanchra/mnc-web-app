@@ -101,11 +101,13 @@ export default function HomePage() {
     localStorage.setItem("orderMode", "dine-in");
   }
 
-  const [showSelector, setShowSelector] = useState(false);
+  const [showSelector, setShowSelector]     = useState(false);
+  const [isSpecialIntent, setIsSpecialIntent] = useState(false);
 
   // ── Route helpers ──────────────────────────────────────────────────────────
 
   const goDineIn = () => {
+    setIsSpecialIntent(false);
     if (hasTable) navigate(`/menu?mode=dine-in&table=${tableNumber}`);
     else setShowSelector(true);
   };
@@ -114,7 +116,12 @@ export default function HomePage() {
     localStorage.setItem("tableNumber", String(n));
     localStorage.setItem("orderMode", "dine-in");
     setShowSelector(false);
-    navigate(`/menu?mode=dine-in&table=${n}`);
+
+    if (isSpecialIntent) {
+      navigate(`/menu?mode=dine-in&table=${n}&filter=special`);
+    } else {
+      navigate(`/menu?mode=dine-in&table=${n}`);
+    }
   };
 
   const goTakeaway = () => {
@@ -123,7 +130,16 @@ export default function HomePage() {
     navigate("/menu?mode=takeaway");
   };
 
-  const goSpecials = () => navigate("/menu?filter=special");
+  const goSpecials = () => {
+    const savedTable = localStorage.getItem("tableNumber");
+    if (!savedTable && !hasTable) {
+      setIsSpecialIntent(true);
+      setShowSelector(true);
+    } else {
+      const activeTable = tableNumber || savedTable;
+      navigate(`/menu?mode=dine-in&table=${activeTable}&filter=special`);
+    }
+  };
 
   const goMenu = () =>
     navigate(hasTable ? `/menu?mode=dine-in&table=${tableNumber}` : "/menu");
@@ -357,7 +373,7 @@ export default function HomePage() {
 
               {/* Google Maps / Review Us */}
               <a
-                href="https://maps.google.com"
+                href="https://www.google.com/maps/place/MID+NIGHT+COFFEE,+MNC/@26.9011846,75.7368755,17z/data=!4m8!3m7!1s0x396db5006aa9fcc9:0x40e85b39d3738057!8m2!3d26.9011846!4d75.7368755!9m1!1b1!16s%2Fg%2F11zd31mc2v!18m1!1e1?entry=ttu&g_ep=EgoyMDI2MDgyNi4wIKXMDSoASAFQAw%3D%3D"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 flex items-center justify-center gap-1.5
@@ -371,9 +387,9 @@ export default function HomePage() {
               </a>
             </motion.div>
 
-          </div>{/* /inner padding */}
-        </div>{/* /gold-border card */}
-      </div>{/* /page wrapper */}
+          </div>
+        </div>
+      </div>
 
       {/* ── TABLE SELECTOR MODAL ── */}
       <AnimatePresence>
