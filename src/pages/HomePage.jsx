@@ -168,7 +168,7 @@ export default function HomePage() {
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             >
               <img
-                src="/mnc-logo.png"
+                src="/mnc-logo.svg"
                 alt="MNC Mid Night Coffee"
                 draggable={false}
                 className="w-48 h-48 object-contain"
@@ -312,20 +312,19 @@ export default function HomePage() {
 
                 {/* CTA inside card */}
                 <div className="px-4 py-3">
-                  <motion.button
-                    whileTap={{ scale: 0.97 }}
-                    onClick={goSpecials}
-                    className="w-full flex items-center justify-between
-                               bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500
-                               hover:from-amber-400 hover:to-amber-400
-                               text-black font-black text-[12px] tracking-wide
-                               py-3 px-4 rounded-xl transition-all duration-200
-                               shadow-md shadow-amber-500/20"
-                  >
-                    <span>Order MNC Specials</span>
-                    <ChevronRight size={15} strokeWidth={3} />
-                  </motion.button>
-                </div>
+  <motion.button
+    whileTap={{ scale: 0.97 }}
+    onClick={goSpecials}
+    className="w-full flex items-center justify-between
+               bg-amber-400 hover:bg-amber-300
+               text-black font-black text-[12px] tracking-wide
+               py-3 px-4 rounded-xl transition-all duration-200
+               shadow-[0_4px_16px_rgba(251,191,36,0.3)]"
+  >
+    <span>Order MNC Specials</span>
+    <ChevronRight size={15} strokeWidth={3} />
+  </motion.button>
+</div>
               </div>
             </motion.div>
 
