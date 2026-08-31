@@ -345,7 +345,7 @@ export default function AdminMenu() {
   const [togglingId,     setTogglingId]     = useState(null);
   const [errors,         setErrors]         = useState({});
   const [filterCategory, setFilterCategory] = useState("All");
-  const [searchQuery,    setSearchQuery]    = useState("");
+  const [searchQuery]    = useState("");
   const [imgError,       setImgError]       = useState(false);
 
   // Orders state & Crowd Management Sub-Filter (Active vs Completed)
