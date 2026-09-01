@@ -356,7 +356,7 @@ export default function HomePage() {
             >
               {/* Instagram */}
               <a
-                href="https://instagram.com/midnightcoffeee"
+                href="https://www.instagram.com/midnightcoffeee__?igsi=MThhc25xd2c1ZWw2Nw%3D%3D"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 flex items-center justify-center gap-1.5

@@ -543,17 +543,28 @@ function CheckoutModal({
   const savedMode = localStorage.getItem("orderMode"); // "dine-in" | "takeaway" | null
 
   // Step flow:
-  //   "mode"  → ask Dine-In or Takeaway (skip if orderMode already saved)
-  //   "table" → ask table number (dine-in only, skip if tableNumber already known)
-  //   "cart"  → review order
-  //   "phone" → enter phone (skip if prefilledPhone is set)
+  //   "mode"  → ask Dine-In or Takeaway (skip if orderMode already saved, OR if special filter is active)
+  //   "table" → ask table number (dine-in only, skip if tableNumber already known OR if special filter)
   //   "confirm" → final confirmation
   //   "success" → done
   const deriveInitialStep = () => {
-    if (!savedMode) return "mode";               // never chosen — ask first
-    if (savedMode === "takeaway") return "confirm"; // takeaway: go straight to confirm
-    if (tableNumber)             return "confirm";  // dine-in with table — confirm
-    return "table";                                 // dine-in but no table yet
+    const urlParams = new URLSearchParams(window.location.search);
+    const isSpecialFilter = urlParams.get("filter") === "special";
+    
+    // Special categories bypass table selection entirely
+    if (isSpecialFilter) return "confirm";
+    
+    // If no dining mode is saved, we need to ask at checkout
+    if (!savedMode) return "mode";
+    
+    // If takeaway mode, go straight to confirm
+    if (savedMode === "takeaway") return "confirm";
+    
+    // If dine-in mode but no table number, ask for table
+    if (savedMode === "dine-in" && !tableNumber) return "table";
+    
+    // Otherwise go to confirm
+    return "confirm";
   };
 
   const [step,          setStep]          = useState(deriveInitialStep);
@@ -570,15 +581,20 @@ function CheckoutModal({
   const handleModeSelect = (mode) => {
     setOrderMode(mode);
     localStorage.setItem("orderMode", mode);
+    
     if (mode === "takeaway") {
+      // Takeaway: clear any existing table number and go to confirm
       localStorage.removeItem("tableNumber");
       setLocalTable("");
       setStep("confirm");
     } else {
-      // Dine-in: need a table number first
-      if (localTable) {
+      // Dine-in: check if we have a table number
+      const existingTable = tableNumber || localStorage.getItem("tableNumber");
+      if (existingTable) {
+        setLocalTable(existingTable);
         setStep("confirm");
       } else {
+        // Need to get table number first
         setStep("table");
       }
     }
@@ -617,6 +633,14 @@ function CheckoutModal({
   const handlePlaceOrder = async () => {
     setSubmitting(true);
     try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isSpecialFilter = urlParams.get("filter") === "special";
+      
+      // For special orders, default to takeaway unless explicitly dine-in
+      const finalOrderMode = isSpecialFilter ? "takeaway" : (orderMode || "dine-in");
+      const finalTableNumber = isSpecialFilter ? "Takeaway" : 
+                               (finalOrderMode === "takeaway" ? "Takeaway" : (localTable || "—"));
+
       const orderItems = entries.map(([, e]) => ({
         itemId:       e.itemId,
         itemName:     e.itemName,
@@ -628,14 +652,15 @@ function CheckoutModal({
       }));
 
       await addDoc(collection(db, "orders"), {
-        tableNumber:      orderMode === "takeaway" ? "Takeaway" : (localTable || "—"),
-        orderMode:        orderMode || "dine-in",
+        tableNumber:      finalTableNumber,
+        orderMode:        finalOrderMode,
         items:            orderItems,
         totalPrice:       total,
         status:           "Pending",
         paymentMethod:    "Pay at Counter",
         customerPhone:    verifiedPhone || null,
         isStreakOrder:    isThisOrderReward,
+        isSpecialOrder:   isSpecialFilter,
         createdAt:        serverTimestamp(),
       });
 
@@ -644,11 +669,15 @@ function CheckoutModal({
         await recordOrder(verifiedPhone);
       }
 
-      if (orderMode === "dine-in" && localTable) {
-        localStorage.setItem("tableNumber", localTable);
-      } else if (orderMode === "takeaway") {
-        // Takeaway: wipe any stale table so next dine-in starts fresh
-        localStorage.removeItem("tableNumber");
+      // Only save mode/table if not a special order
+      if (!isSpecialFilter) {
+        if (finalOrderMode === "dine-in" && localTable) {
+          localStorage.setItem("tableNumber", localTable);
+        } else if (finalOrderMode === "takeaway") {
+          // Takeaway: wipe any stale table so next dine-in starts fresh
+          localStorage.removeItem("tableNumber");
+        }
+        localStorage.setItem("orderMode", finalOrderMode);
       }
 
       setStep("success");
@@ -687,14 +716,19 @@ function CheckoutModal({
           {step === "mode" && (
             <>
               <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
-                <h2 className="text-white font-bold text-sm">How are you ordering?</h2>
+                <h2 className="text-white font-bold text-sm">Choose your dining option</h2>
                 <button onClick={onClose}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="px-5 py-6 grid grid-cols-2 gap-3">
+              <div className="px-5 py-6 space-y-4">
+                <p className="text-[#9a9a9a] text-sm text-center">
+                  How would you like to enjoy your order?
+                </p>
+                
+                <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => handleModeSelect("dine-in")}
@@ -722,6 +756,7 @@ function CheckoutModal({
                     <p className="text-[#9a9a9a] text-xs mt-0.5">Pick up &amp; go</p>
                   </div>
                 </button>
+                </div>
               </div>
             </>
           )}
@@ -735,7 +770,7 @@ function CheckoutModal({
                   <ArrowLeft size={16} />
                 </button>
                 <h2 className="text-white font-bold flex items-center gap-2 flex-1">
-                  <TableProperties size={16} className="text-[#f5a623]" /> Enter Table Number
+                  <TableProperties size={16} className="text-[#f5a623]" /> Choose Your Table
                 </h2>
                 <button onClick={onClose}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
@@ -744,23 +779,101 @@ function CheckoutModal({
               </div>
 
               <div className="px-5 py-6 space-y-4">
+                <div className="text-center mb-4">
+                  <p className="text-[#f5a623] text-sm font-semibold">🪑 Dine-In Selected</p>
+                  <p className="text-[#9a9a9a] text-xs mt-1">Please enter your table number to complete your order</p>
+                </div>
+                
                 <div>
-                  <label className="block text-xs font-medium text-[#9a9a9a] mb-1.5">
-                    Table Number 
-                  </label>
-                  <input type="number" value={localTable}
-                    onChange={(e) => setLocalTable(e.target.value)}
-                    placeholder="Enter your table no."
-                    className="w-full bg-[#1a1a1a] border border-[#3a3a3a] text-white
-                               placeholder-[#555] rounded-xl px-4 py-2.5 text-sm
-                               focus:outline-none focus:border-[#f5a623] transition-colors" />
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-xs font-medium text-[#9a9a9a]">
+                      Select Your Table Number
+                    </label>
+                    <span className="text-xs text-green-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
+                      All tables available
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-2 mb-4">
+                    {Array.from({ length: 10 }, (_, i) => {
+                      const tableNum = (i + 1).toString();
+                      const isSelected = localTable === tableNum;
+                      return (
+                        <motion.button
+                          key={tableNum}
+                          type="button"
+                          onClick={() => setLocalTable(tableNum)}
+                          whileTap={{ scale: 0.9 }}
+                          whileHover={{ scale: 1.05 }}
+                          className={`aspect-square rounded-xl border-2 transition-all duration-200 
+                                     flex items-center justify-center text-sm font-bold
+                                     relative overflow-hidden
+                                     ${isSelected 
+                                       ? 'bg-[#f5a623] border-[#f5a623] text-[#1a1a1a] shadow-lg shadow-[#f5a623]/30' 
+                                       : 'bg-[#2a2a2a] border-[#3a3a3a] text-[#9a9a9a] hover:border-[#f5a623]/50 hover:text-white'
+                                     }`}
+                        >
+                          {isSelected && (
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              className="absolute inset-0 bg-[#f5a623]/20 rounded-xl"
+                            />
+                          )}
+                          <span className="relative z-10">{tableNum}</span>
+                          {isSelected && (
+                            <motion.div
+                              initial={{ scale: 0, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              className="absolute top-1 right-1 w-2 h-2 bg-[#1a1a1a] rounded-full"
+                            />
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Custom table number input as fallback */}
+                  <details className="group">
+                    <summary className="text-xs text-[#9a9a9a] cursor-pointer hover:text-white transition-colors mb-2 list-none">
+                      <span className="flex items-center gap-1">
+                        Don't see your table? Enter custom number
+                        <svg 
+                          className="w-3 h-3 transition-transform group-open:rotate-180" 
+                          fill="none" 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </span>
+                    </summary>
+                    <input 
+                      type="text" 
+                      value={localTable && !['1','2','3','4','5','6','7','8','9','10'].includes(localTable) ? localTable : ''}
+                      onChange={(e) => setLocalTable(e.target.value)}
+                      placeholder="Enter table number"
+                      className="w-full bg-[#1a1a1a] border border-[#3a3a3a] text-white
+                                 placeholder-[#555] rounded-xl px-4 py-2.5 text-sm
+                                 focus:outline-none focus:border-[#f5a623] transition-colors" 
+                    />
+                  </details>
                 </div>
 
-                <button onClick={() => setStep("confirm")} disabled={!localTable.trim()}
+                <button onClick={() => {
+                    if (localTable.trim()) {
+                      localStorage.setItem("tableNumber", localTable.trim());
+                      setStep("confirm");
+                    }
+                  }} disabled={!localTable.trim()}
                   className="w-full flex items-center justify-center gap-2
                              bg-[#f5a623] hover:bg-[#e08a00] disabled:opacity-50
-                             text-[#1a1a1a] font-bold py-3 rounded-xl text-sm transition-colors">
-                  Continue <ChevronRight size={15} />
+                             text-[#1a1a1a] font-bold py-3 rounded-xl text-sm transition-colors
+                             min-h-[48px]">
+                  {localTable.trim() 
+                    ? <>Confirm Table {localTable} <ChevronRight size={15} /></>
+                    : <>Select a Table <ChevronRight size={15} /></>
+                  }
                 </button>
               </div>
             </>
@@ -835,11 +948,23 @@ function CheckoutModal({
             <>
               <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
                 <button onClick={() => {
-                    if (verifiedPhone && prefilledPhone) {
-                      // Phone came from gate — back goes to mode/table
-                      setStep(orderMode === "takeaway" ? "mode" : (localTable ? "mode" : "table"));
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const isSpecialFilter = urlParams.get("filter") === "special";
+                    
+                    if (isSpecialFilter) {
+                      // Special orders can go back to main menu
+                      window.history.back();
+                      return;
+                    }
+                    
+                    // Regular flow: go back based on current state
+                    if (orderMode === "takeaway" || !orderMode) {
+                      setStep("mode");
+                    } else if (orderMode === "dine-in") {
+                      // If dine-in, go back to table selection or mode selection
+                      setStep(localTable ? "table" : "mode");
                     } else {
-                      setStep("phone");
+                      setStep("mode");
                     }
                   }}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
@@ -855,28 +980,66 @@ function CheckoutModal({
               </div>
 
               <div className="px-5 py-5 space-y-4">
-                {isThisOrderReward && (
-                  <div className="flex items-center gap-3 bg-amber-500/12 border border-amber-400/40
-                               rounded-xl px-4 py-3">
-                    <span className="text-2xl flex-shrink-0">🎉</span>
-                    <div>
-                      <p className="text-amber-300 font-bold text-sm leading-tight">
-                        7th Order Unlocked!
-                      </p>
-                      <p className="text-amber-500/70 text-xs mt-0.5">
-                        MNC Special Burger added to your order for FREE!
-                      </p>
-                    </div>
-                  </div>
-                )}
+                {(() => {
+                  const urlParams = new URLSearchParams(window.location.search);
+                  const isSpecialFilter = urlParams.get("filter") === "special";
+                  
+                  if (isSpecialFilter) {
+                    return (
+                      <div className="flex items-center gap-3 bg-amber-500/12 border border-amber-400/40
+                                   rounded-xl px-4 py-3">
+                        <span className="text-2xl flex-shrink-0">⭐</span>
+                        <div>
+                          <p className="text-amber-300 font-bold text-sm leading-tight">
+                            MNC Special Order
+                          </p>
+                          <p className="text-amber-500/70 text-xs mt-0.5">
+                            Your special order will be prepared for takeaway
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  if (isThisOrderReward) {
+                    return (
+                      <div className="flex items-center gap-3 bg-amber-500/12 border border-amber-400/40
+                                   rounded-xl px-4 py-3">
+                        <span className="text-2xl flex-shrink-0">🎉</span>
+                        <div>
+                          <p className="text-amber-300 font-bold text-sm leading-tight">
+                            7th Order Unlocked!
+                          </p>
+                          <p className="text-amber-500/70 text-xs mt-0.5">
+                            MNC Special Burger added to your order for FREE!
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                })()}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl p-3">
                     <p className="text-[#9a9a9a] text-xs mb-0.5">
-                      {orderMode === "takeaway" ? "Mode" : "Table"}
+                      {(() => {
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const isSpecialFilter = urlParams.get("filter") === "special";
+                        
+                        if (isSpecialFilter) return "Special Order";
+                        return orderMode === "takeaway" ? "Mode" : "Table";
+                      })()}
                     </p>
                     <p className="text-white font-bold text-lg">
-                      {orderMode === "takeaway" ? "🛍️ Takeaway" : (localTable || "—")}
+                      {(() => {
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const isSpecialFilter = urlParams.get("filter") === "special";
+                        
+                        if (isSpecialFilter) return "⭐ MNC Special";
+                        return orderMode === "takeaway" ? "🛍️ Takeaway" : (localTable || "—");
+                      })()}
                     </p>
                   </div>
                   <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl p-3">
@@ -926,17 +1089,31 @@ function CheckoutModal({
                 Your order is being prepared. Please pay at the counter when ready.
               </p>
               <div className="mt-4 bg-[#242424] border border-[#2e2e2e] rounded-xl px-5 py-3">
-                {orderMode === "takeaway" ? (
-                  <>
-                    <p className="text-[#9a9a9a] text-xs">Order Type</p>
-                    <p className="text-[#f5a623] font-bold text-2xl">🛍️ Takeaway</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-[#9a9a9a] text-xs">Table Number</p>
-                    <p className="text-[#f5a623] font-bold text-2xl">{localTable}</p>
-                  </>
-                )}
+                {(() => {
+                  const urlParams = new URLSearchParams(window.location.search);
+                  const isSpecialFilter = urlParams.get("filter") === "special";
+                  
+                  if (isSpecialFilter) {
+                    return (
+                      <>
+                        <p className="text-[#9a9a9a] text-xs">Special Order</p>
+                        <p className="text-[#f5a623] font-bold text-2xl">⭐ MNC Special</p>
+                      </>
+                    );
+                  }
+                  
+                  return orderMode === "takeaway" ? (
+                    <>
+                      <p className="text-[#9a9a9a] text-xs">Order Type</p>
+                      <p className="text-[#f5a623] font-bold text-2xl">🛍️ Takeaway</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[#9a9a9a] text-xs">Table Number</p>
+                      <p className="text-[#f5a623] font-bold text-2xl">{localTable}</p>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -1140,14 +1317,20 @@ export default function CustomerMenu() {
   const count = cartCount(cart);
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a]">
+    <div className="min-h-screen bg-[#1a1a1a] flex justify-center">
+      {/* Mobile-first container with shadow on larger screens */}
+      <div className="w-full max-w-md mx-auto bg-[#1a1a1a] shadow-2xl min-h-screen relative">
+        {/* Shadow overlay for desktop */}
+        <div className="hidden md:block absolute inset-0 -z-10 bg-gradient-to-r from-black/20 via-transparent to-black/20 rounded-2xl" />
+        
+        <div className="relative z-10">
 
       {/* ── Phone Gate — blocks all interaction until a phone is provided ── */}
       {phoneGateRequired && (
         <PhoneGateModal onVerified={handlePhoneVerified} />
       )}
       <header className="sticky top-0 z-30 bg-[#1a1a1a]/95 backdrop-blur border-b border-[#2e2e2e]">
-        <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
+        <div className="px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link to="/"
               className="p-2 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
@@ -1216,7 +1399,7 @@ export default function CustomerMenu() {
         <StreakBanner completedOrders={completedOrders} />
       )}
 
-      <main className="max-w-5xl mx-auto px-4 py-4">
+      <main className="px-4 py-4">
 
         {!loading && items.length > 0 && (
           <div className="flex items-center justify-end mb-4">
@@ -1402,6 +1585,8 @@ export default function CustomerMenu() {
           />
         )}
       </AnimatePresence>
+        </div>
+      </div>
     </div>
   );
 }

@@ -523,6 +523,29 @@ export default function AdminMenu() {
   const formTopRef = useRef(null);
   const initialLoadRef = useRef(true);
 
+  // Prevent browser back navigation from leaving admin panel
+  useEffect(() => {
+    const handlePopState = (event) => {
+      event.preventDefault();
+      if (window.confirm("Are you sure you want to leave the admin panel? You will need to log in again.")) {
+        logout().then(() => {
+          navigate("/admin/login", { replace: true });
+        });
+      } else {
+        // Push the current state back to prevent navigation
+        window.history.pushState(null, "", window.location.href);
+      }
+    };
+
+    // Add current state to history to intercept back navigation
+    window.history.pushState(null, "", window.location.href);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [logout, navigate]);
+
   // Firestore Menu Listener
   useEffect(() => {
     return onSnapshot(collection(db, "menu_items"), (snap) => {
@@ -699,11 +722,17 @@ export default function AdminMenu() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link to="/"
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                if (window.confirm("Are you sure you want to leave the admin panel? You will need to log in again.")) {
+                  handleLogout();
+                }
+              }}
               className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-              title="Back to home">
+              title="Exit admin panel">
               <ArrowLeft size={18} />
-            </Link>
+            </button>
             <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center">
               <UtensilsCrossed size={18} className="text-white" />
             </div>
