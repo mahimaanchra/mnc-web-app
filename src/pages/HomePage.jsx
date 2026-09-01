@@ -1,10 +1,12 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   UtensilsCrossed, ShoppingBag, X,
   AtSign, MapPin, ChevronRight,
 } from "lucide-react";
+import SessionManager from "../utils/sessionManager";
 
 // ─── Table Selector Modal ──────────────────────────────────────────────────────
 
@@ -90,6 +92,17 @@ export default function HomePage() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Check for session reset on homepage load
+  useEffect(() => {
+    // Use SessionManager to handle session cleanup
+    const sessionState = SessionManager.initialize();
+    
+    // Log session state for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🏠 HomePage session state:', SessionManager.getDebugInfo());
+    }
+  }, []);
+
   // Read ?table=N from URL (QR scan)
   const params      = new URLSearchParams(location.search);
   const urlTable    = params.get("table");
@@ -97,8 +110,8 @@ export default function HomePage() {
   const hasTable    = Number.isInteger(tableNumber) && tableNumber >= 1 && tableNumber <= 10;
 
   if (hasTable) {
-    localStorage.setItem("tableNumber", String(tableNumber));
-    localStorage.setItem("orderMode", "dine-in");
+    SessionManager.setTableNumber(String(tableNumber));
+    SessionManager.setOrderMode("dine-in");
   }
 
   const [showSelector, setShowSelector]     = useState(false);
@@ -113,8 +126,8 @@ export default function HomePage() {
   };
 
   const onTablePick = (n) => {
-    localStorage.setItem("tableNumber", String(n));
-    localStorage.setItem("orderMode", "dine-in");
+    SessionManager.setTableNumber(String(n));
+    SessionManager.setOrderMode("dine-in");
     setShowSelector(false);
 
     if (isSpecialIntent) {

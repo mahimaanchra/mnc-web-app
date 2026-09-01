@@ -15,6 +15,9 @@ import {
 import { useLoyalty, STREAK_TARGET } from "../hooks/useLoyalty";
 import OrderTracker from "../components/OrderTracker";
 import OrderModificationSheet from "../components/OrderModificationSheet";
+import SessionManager from "../utils/sessionManager";
+
+// ─── Session Management Helpers ────────────────────────────────────────────
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -539,8 +542,15 @@ function CheckoutModal({
   completedOrders, fetchProfile, recordOrder,
   prefilledPhone,   // already verified via PhoneGateModal — skips the phone step
 }) {
-  // Determine the saved order mode from localStorage
-  const savedMode = localStorage.getItem("orderMode"); // "dine-in" | "takeaway" | null
+  // Get session state safely from SessionManager or localStorage
+  const sessionState = SessionManager.getSession ? SessionManager.getSession() : {
+    orderMode: localStorage.getItem("orderMode"),
+    tableNumber: localStorage.getItem("tableNo"),
+    verifiedPhone: localStorage.getItem("verifiedPhone")
+  };
+
+  // Determine the saved order mode from localStorage with session awareness
+  const { orderMode: savedMode } = sessionState;
 
   // Step flow:
   //   "mode"  → ask Dine-In or Takeaway (skip if orderMode already saved, OR if special filter is active)
@@ -580,16 +590,16 @@ function CheckoutModal({
 
   const handleModeSelect = (mode) => {
     setOrderMode(mode);
-    localStorage.setItem("orderMode", mode);
+    SessionManager.setOrderMode(mode);
     
     if (mode === "takeaway") {
       // Takeaway: clear any existing table number and go to confirm
-      localStorage.removeItem("tableNumber");
+      SessionManager.setTableNumber(null);
       setLocalTable("");
       setStep("confirm");
     } else {
       // Dine-in: check if we have a table number
-      const existingTable = tableNumber || localStorage.getItem("tableNumber");
+      const existingTable = tableNumber || sessionState.tableNumber;
       if (existingTable) {
         setLocalTable(existingTable);
         setStep("confirm");
@@ -862,7 +872,7 @@ function CheckoutModal({
 
                 <button onClick={() => {
                     if (localTable.trim()) {
-                      localStorage.setItem("tableNumber", localTable.trim());
+                      SessionManager.setTableNumber(localTable.trim());
                       setStep("confirm");
                     }
                   }} disabled={!localTable.trim()}
@@ -1209,12 +1219,16 @@ function CartDrawer({ cart, onUpdateQty, onClose, onCheckout }) {
 export default function CustomerMenu() {
   const location = useLocation();
 
+  // Initialize session management
+  const sessionState = SessionManager.initialize();
+  
   const tableNumber = (() => {
     const p = new URLSearchParams(location.search).get("table");
-    return p ?? localStorage.getItem("tableNumber") ?? "";
+    return p ?? sessionState.tableNumber ?? "";
   })();
+  
   useEffect(() => {
-    if (tableNumber) localStorage.setItem("tableNumber", tableNumber);
+    if (tableNumber) SessionManager.setTableNumber(tableNumber);
   }, [tableNumber]);
 
   const {
@@ -1232,6 +1246,34 @@ export default function CustomerMenu() {
 
   // Show gate if phone is still empty after mount
   const phoneGateRequired = !verifiedPhone;
+
+  // Listen for session reset events
+  useEffect(() => {
+    const unsubscribe = SessionManager.onSessionReset((detail) => {
+      console.log('🔄 CustomerMenu received session reset:', detail);
+      
+      // Reset local state that depends on session
+      setCart({});
+      setCartOpen(false);
+      setCheckoutOpen(false);
+      setModifyingOrder(null);
+      setTrackerOpen(false);
+      setAddOrNewOpen(false);
+      
+      // Show a brief notification to user
+      console.log('✨ Starting fresh session for your next order');
+      
+      // Optional: Force component refresh for order completion
+      if (detail.reason === 'orderCompleted') {
+        setTimeout(() => {
+          // Soft refresh - just reload the component state
+          window.location.reload();
+        }, 2000);
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Callback handed to PhoneGateModal — phone is already saved to localStorage
   // by the time this fires; we just sync React state and kick off data fetches.
@@ -1531,12 +1573,27 @@ export default function CustomerMenu() {
               if (verifiedPhone) {
                 recordOrder(verifiedPhone);
               }
-              // Wipe session so next visit starts at mode selection
-              localStorage.removeItem("orderMode");
-              localStorage.removeItem("tableNumber");
+              
+              // Clear session data for fresh next order
+              // Note: Only clear if this is NOT a special order, as special orders 
+              // should not persist mode/table preferences
+              const urlParams = new URLSearchParams(window.location.search);
+              const isSpecialFilter = urlParams.get("filter") === "special";
+              
+              if (isSpecialFilter) {
+                // Special orders: always clear to ensure fresh experience
+                localStorage.removeItem("orderMode");
+                localStorage.removeItem("tableNumber");
+              } else {
+                // Regular orders: clear for now, but this will be managed by OrderTracker
+                // when the order actually completes
+              }
+              
               setCart({});
               setCheckoutOpen(false);
               setCartOpen(false);
+              
+              console.log('✅ Order placed successfully - session prepared for next order');
             }}
             completedOrders={completedOrders}
             fetchProfile={fetchProfile}

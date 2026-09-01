@@ -27,6 +27,7 @@ import {
   CircleDollarSign, PlusCircle, ChevronDown, ChevronUp,
   PackageX,
 } from "lucide-react";
+import SessionManager from "../utils/sessionManager";
 
 // ─── Status badge config ───────────────────────────────────────────────────────
 
@@ -272,13 +273,16 @@ export default function OrderTracker({
         ? fetched.filter((o) => !o.tableNumber || String(o.tableNumber) === sessionTable)
         : fetched;
 
-      // Wipe session when active order completes
+      // Wipe session when active order completes - ENHANCED RESET
       const prevOrders  = ordersRef.current;
-      const hadActive   = prevOrders.some((o) => o.status === "Pending" || o.status === "Preparing");
-      const nowHasActive = scoped.some((o) => o.status === "Pending" || o.status === "Preparing");
+      const hadActive   = prevOrders.some((o) => o.status === "Pending" || o.status === "Preparing" || o.status === "Ready");
+      const nowHasActive = scoped.some((o) => o.status === "Pending" || o.status === "Preparing" || o.status === "Ready");
+      
+      
+      // Use SessionManager for comprehensive reset
       if (hadActive && !nowHasActive) {
-        localStorage.removeItem("tableNumber");
-        localStorage.removeItem("orderMode");
+        console.log('🔄 OrderTracker: All orders completed, triggering session reset');
+        SessionManager.handleOrderCompletion();
       }
 
       setOrders(scoped);
