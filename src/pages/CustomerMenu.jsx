@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { collection, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection, onSnapshot, addDoc, serverTimestamp,
+  doc, updateDoc, arrayUnion, increment,
+} from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useLocation, Link } from "react-router-dom";
 import {
    ShoppingCart, Plus, Minus, X, UtensilsCrossed,
   PackageX, ArrowLeft, CheckCircle2, ChevronRight,
-  Phone, Loader2, ReceiptText, TableProperties, Gift,
-  ClipboardList,
+  Phone, Loader2, TableProperties, Gift,
+  ClipboardList, PlusCircle, ShoppingBag,
 } from "lucide-react";
 import { useLoyalty, STREAK_TARGET } from "../hooks/useLoyalty";
 import OrderTracker from "../components/OrderTracker";
@@ -52,6 +55,160 @@ function cartTotal(cart) {
 }
 function cartCount(cart) {
   return Object.values(cart).reduce((s, e) => s + e.qty, 0);
+}
+
+// ─── Add-to-Current vs New Order Modal ────────────────────────────────────────
+// Shown when the customer taps "Proceed to Checkout" while a Pending/Preparing
+// order already exists. They choose whether to append cart items to that order
+// or start a completely new order.
+
+function AddOrNewModal({ activeOrder, cart, onAddToCurrent, onNewOrder, onClose }) {
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
+
+  const cartEntries  = Object.values(cart).filter((e) => !e.isFreeStreak);
+  const cartTotal    = cartEntries.reduce((s, e) => s + e.price * e.qty, 0);
+  const itemCount    = cartEntries.reduce((s, e) => s + e.qty, 0);
+
+  const handleAddToCurrent = async () => {
+    if (loading) return;
+    setLoading(true);
+    setError("");
+    try {
+      const modItems = cartEntries.map((e) => ({
+        itemId:       e.itemId,
+        itemName:     e.itemName,
+        variantLabel: e.variantLabel,
+        price:        e.price,
+        qty:          e.qty,
+      }));
+
+      await updateDoc(doc(db, "orders", activeOrder.id), {
+        modifications:   arrayUnion({
+          items:      modItems,
+          addedPrice: cartTotal,
+          addedAt:    new Date().toISOString(),
+          note:       null,
+        }),
+        totalPrice:      increment(cartTotal),
+        hasModification: true,
+        lastModifiedAt:  serverTimestamp(),
+      });
+
+      onAddToCurrent();           // clears cart + closes checkout
+    } catch (err) {
+      console.error("Add-to-current failed:", err);
+      setError("Could not add items. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        key="aon-backdrop"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={!loading ? onClose : undefined}
+        className="fixed inset-0 bg-black/75 z-[60] backdrop-blur-sm"
+      />
+
+      {/* Card */}
+      <motion.div
+        key="aon-card"
+        initial={{ opacity: 0, scale: 0.94, y: 20 }}
+        animate={{ opacity: 1, scale: 1,    y: 0  }}
+        exit={   { opacity: 0, scale: 0.94, y: 20 }}
+        transition={{ type: "spring", damping: 28, stiffness: 320 }}
+        className="fixed inset-0 z-[61] flex items-end sm:items-center justify-center p-4 pointer-events-none"
+      >
+        <div className="bg-[#1e1e1e] border border-[#2e2e2e] rounded-2xl w-full max-w-sm
+                        shadow-2xl pointer-events-auto overflow-hidden">
+
+          {/* Top amber strip */}
+          <div className="h-1 w-full bg-gradient-to-r from-[#f5a623] via-amber-300 to-[#f5a623]" />
+
+          <div className="px-5 pt-5 pb-6 space-y-4">
+            {/* Heading */}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-white font-bold text-base leading-tight">
+                  You have an active order
+                </h2>
+                <p className="text-[#9a9a9a] text-xs mt-1 leading-relaxed">
+                  {order_summary(activeOrder)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e]
+                           transition-colors flex-shrink-0 disabled:opacity-40"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            {/* Cart summary pill */}
+            <div className="flex items-center gap-2.5 bg-[#242424] border border-[#2e2e2e]
+                            rounded-xl px-3.5 py-2.5">
+              <ShoppingBag size={15} className="text-[#f5a623] flex-shrink-0" />
+              <p className="text-white text-xs flex-1 min-w-0">
+                <span className="font-bold">{itemCount} item{itemCount !== 1 ? "s" : ""}</span>
+                <span className="text-[#9a9a9a]"> in your cart</span>
+                <span className="text-[#f5a623] font-bold ml-1.5">₹{cartTotal}</span>
+              </p>
+            </div>
+
+            {error && (
+              <p className="text-red-400 text-xs">{error}</p>
+            )}
+
+            {/* Choice buttons */}
+            <button
+              type="button"
+              onClick={handleAddToCurrent}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2
+                         bg-[#f5a623] hover:bg-[#e08a00]
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         text-[#1a1a1a] font-bold py-3.5 rounded-2xl text-sm
+                         transition-colors shadow-lg shadow-[#f5a623]/20 active:scale-[0.98]"
+            >
+              {loading
+                ? <><Loader2 size={15} className="animate-spin" /> Adding to order…</>
+                : <><PlusCircle size={15} /> Add to Current Order</>}
+            </button>
+
+            <button
+              type="button"
+              onClick={onNewOrder}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2
+                         border border-[#3a3a3a] hover:border-[#f5a623]/40
+                         text-[#9a9a9a] hover:text-white
+                         disabled:opacity-50 font-semibold py-3 rounded-2xl text-sm
+                         transition-colors active:scale-[0.98]"
+            >
+              <ShoppingCart size={15} /> Place as New Order
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+// Helper — short human-readable summary of the active order for the modal subtitle
+function order_summary(order) {
+  const table = order.orderMode === "takeaway"
+    ? "Takeaway"
+    : `Table ${order.tableNumber ?? "—"}`;
+  const status = order.status;
+  const total  = order.totalPrice ?? 0;
+  return `${table} · ${status} · ₹${total}`;
 }
 
 // ─── Phone Gate Modal ─────────────────────────────────────────────────────────
@@ -394,9 +551,9 @@ function CheckoutModal({
   //   "success" → done
   const deriveInitialStep = () => {
     if (!savedMode) return "mode";               // never chosen — ask first
-    if (savedMode === "takeaway") return "cart"; // takeaway: no table needed
-    if (tableNumber)             return "cart";  // dine-in with table already set
-    return "table";                              // dine-in but no table yet
+    if (savedMode === "takeaway") return "confirm"; // takeaway: go straight to confirm
+    if (tableNumber)             return "confirm";  // dine-in with table — confirm
+    return "table";                                 // dine-in but no table yet
   };
 
   const [step,          setStep]          = useState(deriveInitialStep);
@@ -414,14 +571,13 @@ function CheckoutModal({
     setOrderMode(mode);
     localStorage.setItem("orderMode", mode);
     if (mode === "takeaway") {
-      // Wipe any stale table from a previous dine-in session
       localStorage.removeItem("tableNumber");
       setLocalTable("");
-      setStep("cart");
+      setStep("confirm");
     } else {
-      // Dine-in: if we already have a table number, skip straight to cart
+      // Dine-in: need a table number first
       if (localTable) {
-        setStep("cart");
+        setStep("confirm");
       } else {
         setStep("table");
       }
@@ -496,7 +652,7 @@ function CheckoutModal({
       }
 
       setStep("success");
-      setTimeout(() => { onOrderPlaced(); }, 3500);
+      setTimeout(() => { onOrderPlaced(); }, 1800);
     } catch (err) {
       console.error("Order failed:", err);
       setPhoneError("Order could not be placed. Please try again.");
@@ -600,105 +756,11 @@ function CheckoutModal({
                                focus:outline-none focus:border-[#f5a623] transition-colors" />
                 </div>
 
-                <button onClick={() => setStep("cart")} disabled={!localTable.trim()}
+                <button onClick={() => setStep("confirm")} disabled={!localTable.trim()}
                   className="w-full flex items-center justify-center gap-2
                              bg-[#f5a623] hover:bg-[#e08a00] disabled:opacity-50
                              text-[#1a1a1a] font-bold py-3 rounded-xl text-sm transition-colors">
                   Continue <ChevronRight size={15} />
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* ── STEP: cart review ── */}
-          {step === "cart" && (
-            <>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      if (orderMode === "takeaway") setStep("mode");
-                      else if (!tableNumber) setStep("table");
-                      else setStep("mode");
-                    }}
-                    className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
-                    <ArrowLeft size={16} />
-                  </button>
-                  <h2 className="text-white font-bold flex items-center gap-2 flex-wrap">
-                    <ReceiptText size={18} className="text-[#f5a623]" />
-                    Review Order
-                    <span className="text-xs font-medium text-[#f5a623]">
-                      {orderMode === "takeaway"
-                        ? "· 🛍️ Takeaway"
-                        : localTable ? `· Table ${localTable}` : ""}
-                    </span>
-                  </h2>
-                </div>
-                <button onClick={onClose}
-                  className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="px-5 py-4 space-y-2.5 max-h-64 overflow-y-auto">
-                {entries.map(([key, entry]) => (
-                  <div key={key} className={`flex items-center gap-3 rounded-xl p-3 border
-                                             ${entry.isFreeStreak
-                                               ? "bg-amber-500/10 border-amber-500/30"
-                                               : "bg-[#242424] border-[#2e2e2e]"}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-white text-sm font-medium truncate">{entry.itemName}</p>
-                        {entry.isFreeStreak && (
-                          <span className="text-[10px] font-black text-amber-900
-                                           bg-amber-400 px-1.5 py-0.5 rounded-md
-                                           whitespace-nowrap flex-shrink-0">
-                            🎁 FREE
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[#9a9a9a] text-xs">{entry.variantLabel}</p>
-                    </div>
-                    {!entry.isFreeStreak ? (
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button onClick={() => onUpdateQty(key, -1)}
-                          className="w-6 h-6 rounded-md bg-[#1a1a1a] border border-[#3a3a3a]
-                                     flex items-center justify-center text-[#9a9a9a] hover:text-white transition-colors">
-                          <Minus size={11} />
-                        </button>
-                        <span className="text-white text-sm font-semibold w-4 text-center">{entry.qty}</span>
-                        <button onClick={() => onUpdateQty(key, +1)}
-                          className="w-6 h-6 rounded-md bg-[#1a1a1a] border border-[#3a3a3a]
-                                     flex items-center justify-center text-[#9a9a9a] hover:text-white transition-colors">
-                          <Plus size={11} />
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-amber-400 font-semibold flex-shrink-0">×1</span>
-                    )}
-                    <span className={`font-bold text-sm flex-shrink-0 w-14 text-right
-                                      ${entry.isFreeStreak ? "text-green-400" : "text-[#f5a623]"}`}>
-                      {entry.isFreeStreak ? "FREE" : `₹${entry.price * entry.qty}`}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="px-5 pb-5 border-t border-[#2e2e2e] pt-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-[#9a9a9a] text-sm">Total</span>
-                  <span className="text-white font-bold text-xl">₹{total}</span>
-                </div>
-                <button onClick={() => {
-                    // Phone already verified via gate — skip straight to confirm
-                    if (verifiedPhone) { setStep("confirm"); }
-                    else { setStep("phone"); }
-                  }}
-                  className="w-full flex items-center justify-center gap-2
-                             bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a]
-                             font-bold py-3.5 rounded-xl text-sm transition-colors
-                             shadow-lg shadow-[#f5a623]/20">
-                  Continue to Checkout <ChevronRight size={16} />
                 </button>
               </div>
             </>
@@ -772,7 +834,14 @@ function CheckoutModal({
           {step === "confirm" && (
             <>
               <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
-                <button onClick={() => setStep(verifiedPhone && prefilledPhone ? "cart" : "phone")}
+                <button onClick={() => {
+                    if (verifiedPhone && prefilledPhone) {
+                      // Phone came from gate — back goes to mode/table
+                      setStep(orderMode === "takeaway" ? "mode" : (localTable ? "mode" : "table"));
+                    } else {
+                      setStep("phone");
+                    }
+                  }}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
                   <ArrowLeft size={18} />
                 </button>
@@ -1009,8 +1078,14 @@ export default function CustomerMenu() {
   const [showOutOfStock, setShowOutOfStock] = useState(true);
 
   // ── Order tracking & live modification ─────────────────────────────────────
-  const [modifyingOrder, setModifyingOrder] = useState(null); // order doc to modify
-  const [trackerOpen,    setTrackerOpen]    = useState(false); // controls My Orders sheet
+  const [modifyingOrder,  setModifyingOrder]  = useState(null);  // order doc to modify
+  const [trackerOpen,     setTrackerOpen]     = useState(false); // My Orders sheet
+  const [activeOrder,     setActiveOrder]     = useState(null);  // live active order from tracker
+  const [addOrNewOpen,    setAddOrNewOpen]    = useState(false); // interception modal
+
+  const handleActiveOrderChange = useCallback((order) => {
+    setActiveOrder(order);
+  }, []);
 
   useEffect(() => {
     return onSnapshot(collection(db, "menu_items"), (snap) => {
@@ -1245,7 +1320,17 @@ export default function CustomerMenu() {
               cart={cart}
               onUpdateQty={handleUpdateQty}
               onClose={() => setCartOpen(false)}
-              onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }}
+              onCheckout={() => {
+                setCartOpen(false);
+                // Intercept: if there's a live Pending/Preparing order, ask first
+                const canModify = activeOrder
+                  && (activeOrder.status === "Pending" || activeOrder.status === "Preparing");
+                if (canModify) {
+                  setAddOrNewOpen(true);
+                } else {
+                  setCheckoutOpen(true);
+                }
+              }}
             />
           </>
         )}
@@ -1283,7 +1368,29 @@ export default function CustomerMenu() {
         open={trackerOpen}
         onOpenChange={setTrackerOpen}
         onAddMore={(order) => { setTrackerOpen(false); setModifyingOrder(order); }}
+        onActiveOrderChange={handleActiveOrderChange}
       />
+
+      {/* ── Add-to-current vs new order interception ── */}
+      <AnimatePresence>
+        {addOrNewOpen && activeOrder && (
+          <AddOrNewModal
+            activeOrder={activeOrder}
+            cart={cart}
+            onAddToCurrent={() => {
+              setAddOrNewOpen(false);
+              // Cart items have been pushed to the active order — clear cart
+              setCart({});
+              setCartOpen(false);
+            }}
+            onNewOrder={() => {
+              setAddOrNewOpen(false);
+              setCheckoutOpen(true);
+            }}
+            onClose={() => setAddOrNewOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── Order Modification Sheet ── */}
       <AnimatePresence>
