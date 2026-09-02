@@ -1441,7 +1441,7 @@ export default function CustomerMenu() {
         <StreakBanner completedOrders={completedOrders} />
       )}
 
-      <main className="px-4 py-4">
+      <main className="px-4 py-4 pb-24">
 
         {!loading && items.length > 0 && (
           <div className="flex items-center justify-end mb-4">
