@@ -21,14 +21,7 @@ import SessionManager from "../utils/sessionManager";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const CATEGORY_EMOJI = {
-  "Cold Coffee":"🧋","Mocktails":"🍹","Ice Tea":"🧊",
-  "Shakes":"🥤","Hot Beverages":"☕","Burger":"🍔",
-  "Sandwiches":"🥪","Vada Pav":"🫓","Pizza":"🍕",
-  "Fries":"🍟","Chinese":"🥡","Maggi":"🍜",
-  "Pasta":"🍝","Bread":"🍞","Wrap":"🌯",
-  "Dessert":"🍨","Combos":"🎁",
-};
+// Note: Category emojis removed for cleaner UI
 
 // The reward item injected into the cart on the 7th order
 const FREE_BURGER_KEY   = "__streak_free_burger__";
@@ -1429,7 +1422,7 @@ export default function CustomerMenu() {
                               ${activeCategory === cat
                                 ? "bg-[#f5a623] text-[#1a1a1a]"
                                 : "text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e]"}`}>
-                  {cat !== "All" && (CATEGORY_EMOJI[cat] ?? "🍽️")} {cat}
+                  {cat}
                 </button>
               ))}
             </div>
@@ -1494,7 +1487,6 @@ export default function CustomerMenu() {
           <div key={cat} className="mb-10">
             {activeCategory === "All" && queryParam !== "special" && (
               <div className="flex items-center gap-2 mb-4">
-                <span className="text-xl">{CATEGORY_EMOJI[cat] ?? "🍽️"}</span>
                 <h2 className="text-white font-bold text-lg">{cat}</h2>
                 <div className="flex-1 h-px bg-[#2e2e2e] ml-2" />
               </div>
@@ -1609,6 +1601,7 @@ export default function CustomerMenu() {
         onOpenChange={setTrackerOpen}
         onAddMore={(order) => { setTrackerOpen(false); setModifyingOrder(order); }}
         onActiveOrderChange={handleActiveOrderChange}
+        hideFloatingWidget={true}
       />
 
       {/* ── Add-to-current vs new order interception ── */}

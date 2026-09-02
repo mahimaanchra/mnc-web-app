@@ -243,6 +243,7 @@ export default function OrderTracker({
   onOpenChange,
   onAddMore,
   onActiveOrderChange,   // fn(order | null) — parent tracks active order for interception
+  hideFloatingWidget = false,   // option to hide the floating pill
 }) {
   const [orders, setOrders] = useState([]);
   // Ref so the session-wipe check inside onSnapshot sees the current orders list
@@ -319,7 +320,7 @@ export default function OrderTracker({
     <>
       {/* ── Floating pill — right edge, vertically centred, never near cart bar ── */}
       <AnimatePresence>
-        {activeOrder && !open && (
+        {activeOrder && !open && !hideFloatingWidget && (
           <motion.button
             key="tracker-pill"
             type="button"
