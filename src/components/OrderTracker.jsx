@@ -328,7 +328,7 @@ export default function OrderTracker({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 80, opacity: 0 }}
             transition={{ type: "spring", damping: 22, stiffness: 280 }}
-            className={`fixed right-0 top-1/2 -translate-y-1/2 z-40
+            className={`fixed right-2 top-1/2 -translate-y-1/2 z-40
                         flex flex-col items-center gap-1
                         px-2.5 py-3 rounded-l-2xl shadow-xl
                         ${activeCfg.floatBg}`}

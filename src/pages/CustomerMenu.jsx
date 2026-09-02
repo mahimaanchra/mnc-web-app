@@ -1516,9 +1516,9 @@ export default function CustomerMenu() {
             initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ type: "spring", damping: 22, stiffness: 260 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40
-                       w-[calc(100%-2rem)] max-w-sm"
-            style={{ bottom: "max(24px, env(safe-area-inset-bottom, 24px))" }}>
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50
+                       w-[92%] max-w-md px-4"
+            style={{ bottom: "max(16px, env(safe-area-inset-bottom, 16px))" }}>
             <button onClick={() => setCartOpen(true)}
               className="w-full flex items-center justify-between
                          bg-[#f5a623] text-[#1a1a1a] font-bold
