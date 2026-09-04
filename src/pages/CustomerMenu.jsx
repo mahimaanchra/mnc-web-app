@@ -1240,6 +1240,14 @@ export default function CustomerMenu() {
   // Show gate if phone is still empty after mount
   const phoneGateRequired = !verifiedPhone;
 
+  // Check for orders parameter to auto-open OrderTracker
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    if (urlParams.get("orders") === "true" && verifiedPhone) {
+      setTrackerOpen(true);
+    }
+  }, [location.search, verifiedPhone]);
+
   // Listen for session reset events
   useEffect(() => {
     const unsubscribe = SessionManager.onSessionReset((detail) => {

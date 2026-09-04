@@ -4,8 +4,8 @@
  * Two surfaces:
  *   1. Floating pill  — always visible on the right edge when an active order exists.
  *      Tapping it opens the sheet. Never sits near the bottom cart bar.
- *   2. Slide-up sheet — shows up to 5 recent orders (active + up to 4 completed)
- *      with live text-based status badges.
+ *   2. Slide-up sheet — shows up to 7 recent orders (last 30 days) 
+ *      with live text-based status badges and order history.
  *
  * Props:
  *   phone               – string | null
@@ -257,7 +257,7 @@ export default function OrderTracker({
   useEffect(() => {
     if (!phone) return;
 
-    const cutoff = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+    const cutoff = Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days
     const q = query(
       collection(db, "orders"),
       where("customerPhone", "==", phone),
@@ -297,8 +297,8 @@ export default function OrderTracker({
     (o) => o.status === "Pending" || o.status === "Preparing" || o.status === "Ready",
   ) ?? null;
 
-  // Up to 5 most-recent orders shown in the sheet (active + completed, ordered desc)
-  const displayOrders = orders.slice(0, 5);
+  // Up to 7 most-recent orders shown in the sheet (active + completed, ordered desc)
+  const displayOrders = orders.slice(0, 7);
 
   // Notify parent whenever the active order identity or status changes
   const prevActiveRef = useRef(null);
@@ -383,7 +383,10 @@ export default function OrderTracker({
                               border-b border-[#2e2e2e] flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <ClipboardList size={17} className="text-[#f5a623]" />
-                  <h2 className="text-white font-bold text-base">My Orders</h2>
+                  <div>
+                    <h2 className="text-white font-bold text-base">My Orders</h2>
+                    <p className="text-[#9a9a9a] text-xs">Last 7 orders</p>
+                  </div>
                   {activeOrder && <StatusBadge status={activeOrder.status} />}
                 </div>
                 <button

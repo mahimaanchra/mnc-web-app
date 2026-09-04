@@ -341,7 +341,25 @@ export default function HomePage() {
               </div>
             </motion.div>
 
-            {/* ════════════════════════════════ 6. EXPLORE MENU BUTTON */}
+            {/* ════════════════════════════════ 6. MY ORDERS BUTTON */}
+            <motion.button
+              className="w-full mt-3 flex items-center justify-between
+                         border border-amber-500/30 hover:border-amber-500/55
+                         text-amber-400 hover:text-amber-300
+                         font-bold text-[12px] tracking-wide
+                         py-3.5 px-4 rounded-2xl transition-all duration-200"
+              style={{ background: "rgba(245,158,11,0.04)" }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.38, duration: 0.34 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => navigate("/menu?orders=true")}
+            >
+              <span>My Orders</span>
+              <ChevronRight size={15} strokeWidth={2.5} />
+            </motion.button>
+
+            {/* ════════════════════════════════ 7. EXPLORE MENU BUTTON */}
             <motion.button
               className="w-full mt-3 flex items-center justify-between
                          border border-amber-500/30 hover:border-amber-500/55
@@ -359,7 +377,7 @@ export default function HomePage() {
               <ChevronRight size={15} strokeWidth={2.5} />
             </motion.button>
 
-            {/* ════════════════════════════════ 7. FOOTER */}
+            {/* ════════════════════════════════ 8. FOOTER */}
             <motion.div
               className="w-full mt-5 pt-4 border-t border-amber-500/15
                          flex items-center justify-between gap-3"
