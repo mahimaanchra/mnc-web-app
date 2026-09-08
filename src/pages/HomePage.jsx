@@ -92,10 +92,9 @@ export default function HomePage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Check for session reset on homepage load
-  useEffect(() => {
+ useEffect(() => {
     // Use SessionManager to handle session cleanup
-    const sessionState = SessionManager.initialize();
+    SessionManager.initialize();
     
     // Log session state for debugging
     if (process.env.NODE_ENV === 'development') {
