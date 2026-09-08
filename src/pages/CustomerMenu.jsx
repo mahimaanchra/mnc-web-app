@@ -689,6 +689,8 @@ function CheckoutModal({
         qty:          e.qty,
         addons:       e.addons ?? [],
         isFreeStreak: e.isFreeStreak ?? false,
+        status:       "Pending", // Individual item status
+        addedAt:      new Date(),
       }));
 
       await addDoc(collection(db, "orders"), {
@@ -696,7 +698,7 @@ function CheckoutModal({
         orderMode:        finalOrderMode,
         items:            orderItems,
         totalPrice:       total,
-        status:           "Pending",
+        status:           "Open", // Master order status
         paymentMethod:    "Pay at Counter",
         customerPhone:    verifiedPhone || null,
         isStreakOrder:    isThisOrderReward,
@@ -1612,9 +1614,8 @@ export default function CustomerMenu() {
               onClose={() => setCartOpen(false)}
               onCheckout={() => {
                 setCartOpen(false);
-                // Intercept: if there's a live Pending/Preparing order, ask first
-                const canModify = activeOrder
-                  && (activeOrder.status === "Pending" || activeOrder.status === "Preparing");
+                // Intercept: if there's a live Open order, ask first
+                const canModify = activeOrder && activeOrder.status === "Open";
                 if (canModify) {
                   setAddOrNewOpen(true);
                 } else {

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   collection, addDoc, updateDoc, deleteDoc,
-  doc, onSnapshot, serverTimestamp, query, orderBy,
+  doc, onSnapshot, serverTimestamp, query, orderBy, getDoc,
 } from "firebase/firestore";
 import {
   ref, uploadBytes, getDownloadURL
@@ -11,12 +11,12 @@ import { db, storage } from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import {
-  Plus, Trash2, Pencil, X, Check,
+  Plus, Trash2, Pencil, X,
   ToggleLeft, ToggleRight, ImageIcon, ChevronDown,
   Loader2, PackageX, UtensilsCrossed, ArrowLeft,
   LogOut, ClipboardList, LayoutGrid, Clock,
   CheckCircle2, ChefHat, CircleDollarSign, Volume2, Sparkles, Archive,
-  Upload
+  Upload, ChevronRight
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -45,13 +45,17 @@ const EMPTY_FORM = {
   isMncSpecial: false,
 };
 
-const ORDER_STATUSES = ["Pending", "Preparing", "Ready", "Completed"];
+const ITEM_STATUSES = ["Pending", "Preparing", "Ready"];
 
 const STATUS_META = {
+  // Master Order Statuses
+  Open:      { color: "bg-blue-500/15 text-blue-400 border-blue-500/30",     icon: <Clock size={13} /> },
+  Completed: { color: "bg-green-500/15 text-green-400 border-green-500/30",  icon: <CircleDollarSign size={13} /> },
+  
+  // Individual Item Statuses  
   Pending:   { color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30", icon: <Clock size={13} /> },
   Preparing: { color: "bg-blue-500/15 text-blue-400 border-blue-500/30",       icon: <ChefHat size={13} /> },
   Ready:     { color: "bg-amber-500/15 text-amber-400 border-amber-500/30",    icon: <CheckCircle2 size={13} /> },
-  Completed: { color: "bg-green-500/15 text-green-400 border-green-500/30",    icon: <CircleDollarSign size={13} /> },
 };
 
 // ─── Web Audio API — Singleton Context with Pending Queue ────────────────────
@@ -314,10 +318,46 @@ function MenuItemCard({ item, onEdit, onDelete, onToggleStock, onToggleSpecial, 
   );
 }
 
-function OrderCard({ order, onStatusChange, isUpdating }) {
-  const meta       = STATUS_META[order.status] ?? STATUS_META.Pending;
-  const nextIdx    = ORDER_STATUSES.indexOf(order.status) + 1;
-  const nextStatus = ORDER_STATUSES[nextIdx] ?? null;
+function ItemStatusRow({ item, onStatusChange, isUpdating }) {
+  const currentStatusIndex = ITEM_STATUSES.indexOf(item.status || "Pending");
+  const nextStatus = ITEM_STATUSES[currentStatusIndex + 1];
+  const statusMeta = STATUS_META[item.status || "Pending"];
+
+  return (
+    <div className="flex items-center justify-between py-2 px-3 bg-white rounded-lg border border-gray-100">
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-medium text-gray-900">
+          {item.qty}× {item.itemName}
+        </span>
+        {item.variantLabel && (
+          <span className="text-xs text-gray-500 ml-1">({item.variantLabel})</span>
+        )}
+        <div className="flex items-center gap-2 mt-1">
+          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusMeta.color}`}>
+            {statusMeta.icon} {item.status || "Pending"}
+          </span>
+          <span className="text-xs text-gray-500">₹{item.price * item.qty}</span>
+        </div>
+      </div>
+      {nextStatus && (
+        <button
+          type="button"
+          onClick={() => onStatusChange(nextStatus)}
+          disabled={isUpdating}
+          className="flex items-center gap-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-60
+                     text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+        >
+          {isUpdating ? <Loader2 size={10} className="animate-spin" /> : <ChevronRight size={10} />}
+          {nextStatus}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function OrderCard({ order, onStatusChange, onItemStatusChange, isUpdating }) {
+  const meta = STATUS_META[order.status] ?? STATUS_META.Open;
+  const [expandedItems, setExpandedItems] = useState(false);
 
   // ── Modification data (backward-compatible) ────────────────────────────────
   const modifications = order.modifications ?? [];
@@ -329,6 +369,31 @@ function OrderCard({ order, onStatusChange, isUpdating }) {
 
   // Running total = base totalPrice (already incremented via Firestore increment)
   const runningTotal = order.totalPrice ?? 0;
+
+  // Helper to get all items with their statuses (original + modifications)
+  const getAllItems = () => {
+    const originalItems = (order.items ?? []).map(item => ({
+      ...item,
+      source: 'original',
+      id: `original-${item.itemId}-${item.variantLabel}`,
+    }));
+    
+    const modificationItems = modifications.flatMap((mod, modIndex) => 
+      (mod.items ?? []).map((item, itemIndex) => ({
+        ...item,
+        source: 'modification',
+        modIndex,
+        id: `mod-${modIndex}-${itemIndex}`,
+      }))
+    );
+    
+    return [...originalItems, ...modificationItems];
+  };
+
+  const allItems = getAllItems();
+  const pendingItems = allItems.filter(item => item.status === 'Pending');
+  const preparingItems = allItems.filter(item => item.status === 'Preparing'); 
+  const readyItems = allItems.filter(item => item.status === 'Ready');
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -394,73 +459,167 @@ function OrderCard({ order, onStatusChange, isUpdating }) {
           </span>
         </div>
 
-        {/* ── Original items ── */}
-        <ul className="space-y-1.5 mb-3">
-          {order.items?.map((it, i) => (
-            <li key={i} className="flex justify-between text-sm gap-2">
-              <span className="text-gray-700 flex items-center gap-1.5 flex-wrap">
-                {it.qty}× {it.itemName}
-                {it.variantLabel && (
-                  <span className="text-gray-500">({it.variantLabel})</span>
-                )}
-                {it.isFreeStreak && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black
-                                   bg-amber-400 text-amber-950 px-2 py-0.5 rounded-md
-                                   leading-tight whitespace-nowrap">
-                    🎁 FREE — STREAK #7
-                  </span>
-                )}
-              </span>
-              <span className={`font-medium flex-shrink-0
-                                ${it.isFreeStreak ? "text-green-600" : "text-gray-600"}`}>
-                {it.isFreeStreak ? "FREE" : `₹${it.price * it.qty}`}
-              </span>
-            </li>
-          ))}
-        </ul>
-
-        {/* ── Add-on batches — flat dark blocks, clearly separated ── */}
-        {modifications.map((mod, mi) => (
-          <div key={mi} className="mb-3 rounded-xl bg-[#1a1a1a] overflow-hidden">
-            {/* Batch header row */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[#f5a623]/20">
-              <span className="text-[10px] font-black text-[#f5a623] uppercase tracking-wider">
-                ✚ Customer Added
-                {mod.addedAt
-                  ? ` · ${mod.addedAt.toDate
-                      ? mod.addedAt.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                      : new Date(mod.addedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                  : ""}
-              </span>
-              <span className="text-[10px] font-bold text-[#f5a623]">
-                +₹{mod.addedPrice ?? (mod.items ?? []).reduce((s, it) => s + it.price * it.qty, 0)}
-              </span>
+        {/* Kitchen Status Summary */}
+        {order.status === "Open" && (
+          <div className="mb-3 p-3 bg-gray-50 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Kitchen Status</span>
+              <button 
+                onClick={() => setExpandedItems(!expandedItems)}
+                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              >
+                {expandedItems ? 'Collapse' : 'Expand'}
+                <ChevronDown size={12} className={`transition-transform ${expandedItems ? 'rotate-180' : ''}`} />
+              </button>
             </div>
-            {/* Batch items */}
-            <ul className="px-3 py-2 space-y-1">
-              {(mod.items ?? []).map((it, i) => (
+            <div className="flex gap-3 text-xs">
+              {pendingItems.length > 0 && (
+                <span className="flex items-center gap-1 text-yellow-600">
+                  <Clock size={10} /> {pendingItems.length} Pending
+                </span>
+              )}
+              {preparingItems.length > 0 && (
+                <span className="flex items-center gap-1 text-blue-600">
+                  <ChefHat size={10} /> {preparingItems.length} Preparing
+                </span>
+              )}
+              {readyItems.length > 0 && (
+                <span className="flex items-center gap-1 text-amber-600">
+                  <CheckCircle2 size={10} /> {readyItems.length} Ready
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Detailed item view (expandable) ── */}
+        {expandedItems && order.status === "Open" && (
+          <div className="mb-3 space-y-3">
+            {/* Original items */}
+            <div>
+              <p className="text-xs font-bold text-gray-600 mb-2">Original Order</p>
+              <div className="space-y-2">
+                {(order.items ?? []).map((item, i) => (
+                  <ItemStatusRow 
+                    key={`original-${i}`} 
+                    item={item} 
+                    onStatusChange={(newStatus) => onItemStatusChange(order.id, 'original', i, newStatus)}
+                    isUpdating={isUpdating}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Modification batches */}
+            {modifications.map((mod, modIndex) => (
+              <div key={modIndex}>
+                <p className="text-xs font-bold text-amber-600 mb-2">
+                  Added Items - Batch {modIndex + 1}
+                  {mod.addedAt && (
+                    <span className="font-normal text-gray-500 ml-1">
+                      ({mod.addedAt.toDate 
+                        ? mod.addedAt.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                        : new Date(mod.addedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
+                    </span>
+                  )}
+                </p>
+                <div className="space-y-2">
+                  {(mod.items ?? []).map((item, itemIndex) => (
+                    <ItemStatusRow 
+                      key={`mod-${modIndex}-${itemIndex}`} 
+                      item={item} 
+                      onStatusChange={(newStatus) => onItemStatusChange(order.id, 'modification', modIndex, newStatus, itemIndex)}
+                      isUpdating={isUpdating}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Collapsed item summary ── */}
+        {!expandedItems && (
+          <>
+            {/* Original items */}
+            <ul className="space-y-1.5 mb-3">
+              {order.items?.map((it, i) => (
                 <li key={i} className="flex justify-between text-sm gap-2">
-                  <span className="text-amber-200 font-semibold">
+                  <span className="text-gray-700 flex items-center gap-1.5 flex-wrap">
                     {it.qty}× {it.itemName}
                     {it.variantLabel && (
-                      <span className="font-normal text-amber-400/70 ml-1">
-                        ({it.variantLabel})
+                      <span className="text-gray-500">({it.variantLabel})</span>
+                    )}
+                    {it.isFreeStreak && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black
+                                       bg-amber-400 text-amber-950 px-2 py-0.5 rounded-md
+                                       leading-tight whitespace-nowrap">
+                        🎁 FREE — STREAK #7
+                      </span>
+                    )}
+                    {order.status === "Open" && it.status && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${STATUS_META[it.status]?.color || STATUS_META.Pending.color}`}>
+                        {it.status}
                       </span>
                     )}
                   </span>
-                  <span className="text-[#f5a623] font-bold flex-shrink-0">
-                    ₹{it.price * it.qty}
+                  <span className={`font-medium flex-shrink-0
+                                    ${it.isFreeStreak ? "text-green-600" : "text-gray-600"}`}>
+                    {it.isFreeStreak ? "FREE" : `₹${it.price * it.qty}`}
                   </span>
                 </li>
               ))}
-              {mod.note && (
-                <li className="text-xs text-amber-400/50 italic mt-1">
-                  Note: "{mod.note}"
-                </li>
-              )}
             </ul>
-          </div>
-        ))}
+
+            {/* ── Add-on batches — flat dark blocks, clearly separated ── */}
+            {modifications.map((mod, mi) => (
+              <div key={mi} className="mb-3 rounded-xl bg-[#1a1a1a] overflow-hidden">
+                {/* Batch header row */}
+                <div className="flex items-center justify-between px-3 py-2 border-b border-[#f5a623]/20">
+                  <span className="text-[10px] font-black text-[#f5a623] uppercase tracking-wider">
+                    ✚ Customer Added
+                    {mod.addedAt
+                      ? ` · ${mod.addedAt.toDate
+                          ? mod.addedAt.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : new Date(mod.addedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                      : ""}
+                  </span>
+                  <span className="text-[10px] font-bold text-[#f5a623]">
+                    +₹{mod.addedPrice ?? (mod.items ?? []).reduce((s, it) => s + it.price * it.qty, 0)}
+                  </span>
+                </div>
+                {/* Batch items */}
+                <ul className="px-3 py-2 space-y-1">
+                  {(mod.items ?? []).map((it, i) => (
+                    <li key={i} className="flex justify-between text-sm gap-2">
+                      <span className="text-amber-200 font-semibold flex items-center gap-1.5">
+                        {it.qty}× {it.itemName}
+                        {it.variantLabel && (
+                          <span className="font-normal text-amber-400/70 ml-1">
+                            ({it.variantLabel})
+                          </span>
+                        )}
+                        {order.status === "Open" && it.status && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${STATUS_META[it.status]?.color || STATUS_META.Pending.color}`}>
+                            {it.status}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-[#f5a623] font-bold flex-shrink-0">
+                        ₹{it.price * it.qty}
+                      </span>
+                    </li>
+                  ))}
+                  {mod.note && (
+                    <li className="text-xs text-amber-400/50 italic mt-1">
+                      Note: "{mod.note}"
+                    </li>
+                  )}
+                </ul>
+              </div>
+            ))}
+          </>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-100">
           <div className="flex items-baseline gap-1.5 min-w-0">
@@ -472,20 +631,20 @@ function OrderCard({ order, onStatusChange, isUpdating }) {
               </span>
             )}
           </div>
-          {nextStatus && order.status !== "Completed" ? (
+          {order.status === "Open" ? (
             <button
               type="button"
-              onClick={() => onStatusChange(order.id, nextStatus)}
+              onClick={() => onStatusChange(order.id, "Completed")}
               disabled={isUpdating}
-              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600
+              className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700
                          disabled:opacity-60 text-white text-xs font-semibold
                          px-4 py-2.5 rounded-lg transition-colors
                          min-h-[44px] active:scale-95 flex-shrink-0 ml-auto"
             >
               {isUpdating
                 ? <Loader2 size={12} className="animate-spin" />
-                : <Check size={12} />}
-              Mark {nextStatus}
+                : <CircleDollarSign size={12} />}
+              Complete & Pay
             </button>
           ) : (
             <span className="text-xs text-green-700 font-bold flex items-center gap-1 flex-shrink-0 ml-auto">
@@ -572,7 +731,7 @@ export default function AdminMenu() {
         snap.docChanges().forEach((change) => {
           if (change.type === "added") {
             const newOrder = change.doc.data();
-            if (newOrder.status === "Pending") {
+            if (newOrder.status === "Open") {
               playOrderChime();
             }
           }
@@ -788,6 +947,51 @@ export default function AdminMenu() {
     finally { setUpdatingOrderId(null); }
   };
 
+  const handleItemStatusChange = async (orderId, source, index, newStatus, subIndex = null) => {
+    setUpdatingOrderId(orderId);
+    try {
+      const orderRef = doc(db, "orders", orderId);
+      const orderDoc = await getDoc(orderRef);
+      
+      if (!orderDoc.exists()) return;
+      
+      const orderData = orderDoc.data();
+      
+      if (source === 'original') {
+        // Update original item status
+        const updatedItems = [...(orderData.items || [])];
+        if (updatedItems[index]) {
+          updatedItems[index] = { ...updatedItems[index], status: newStatus };
+          await updateDoc(orderRef, {
+            items: updatedItems,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      } else if (source === 'modification') {
+        // Update modification item status
+        const updatedModifications = [...(orderData.modifications || [])];
+        if (updatedModifications[index] && updatedModifications[index].items) {
+          const updatedModItems = [...updatedModifications[index].items];
+          if (updatedModItems[subIndex]) {
+            updatedModItems[subIndex] = { ...updatedModItems[subIndex], status: newStatus };
+            updatedModifications[index] = {
+              ...updatedModifications[index],
+              items: updatedModItems
+            };
+            await updateDoc(orderRef, {
+              modifications: updatedModifications,
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+      }
+    } catch (err) { 
+      console.error('Item status update failed:', err); 
+    } finally { 
+      setUpdatingOrderId(null); 
+    }
+  };
+
   const categoryCounts = items.reduce((acc, item) => {
     acc[item.category] = (acc[item.category] || 0) + 1;
     return acc;
@@ -799,12 +1003,12 @@ export default function AdminMenu() {
     return matchCat && (!q || item.name?.toLowerCase().includes(q) || item.category?.toLowerCase().includes(q));
   });
 
-  // Crowd Management Filter: Active Orders vs Completed History
-  const activeOrders = orders.filter((o) => o.status !== "Completed");
+  // Crowd Management Filter: Open Orders vs Completed History
+  const activeOrders = orders.filter((o) => o.status === "Open");
   const historyOrders = orders.filter((o) => o.status === "Completed");
   const displayedOrders = orderSubView === "active" ? activeOrders : historyOrders;
 
-  const pendingCount = orders.filter((o) => o.status === "Pending").length;
+  const openCount = orders.filter((o) => o.status === "Open").length;
 
   return (
     <div className="min-h-screen bg-gray-50" onClick={resumeAudioCtx}>
@@ -858,7 +1062,7 @@ export default function AdminMenu() {
             {[
               { id: "menu",   label: "Menu Items",  icon: <LayoutGrid size={14} /> },
               { id: "orders", label: "Live Orders", icon: <ClipboardList size={14} />,
-                badge: pendingCount > 0 ? pendingCount : null },
+                badge: openCount > 0 ? openCount : null },
             ].map((tab) => (
               <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)}
                 className={`relative flex items-center gap-1.5 px-4 py-3 text-sm font-semibold
@@ -1176,7 +1380,7 @@ export default function AdminMenu() {
                               ${orderSubView === "active"
                                 ? "bg-amber-500 text-white border-amber-500 shadow-sm"
                                 : "bg-white text-gray-600 border-gray-200 hover:border-amber-300"}`}>
-                  <Clock size={13} /> Active Orders ({activeOrders.length})
+                  <Clock size={13} /> Open Orders ({activeOrders.length})
                 </button>
                 <button type="button" onClick={() => setOrderSubView("history")}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-colors border
@@ -1205,7 +1409,7 @@ export default function AdminMenu() {
               <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
                 <ClipboardList size={40} className="mx-auto text-gray-300 mb-3" />
                 <p className="text-gray-600 font-semibold text-base">
-                  {orderSubView === "active" ? "No active orders right now!" : "No completed orders history."}
+                  {orderSubView === "active" ? "No open orders right now!" : "No completed orders history."}
                 </p>
                 <p className="text-gray-400 text-xs mt-1">
                   {orderSubView === "active" ? "Incoming customer orders will appear here automatically." : "Completed orders will be archived here."}
@@ -1216,6 +1420,7 @@ export default function AdminMenu() {
                 <AnimatePresence>
                   {displayedOrders.map((order) => (
                     <OrderCard key={order.id} order={order} onStatusChange={handleOrderStatus}
+                      onItemStatusChange={handleItemStatusChange}
                       isUpdating={updatingOrderId === order.id} />
                   ))}
                 </AnimatePresence>

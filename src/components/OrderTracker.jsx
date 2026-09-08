@@ -32,6 +32,14 @@ import SessionManager from "../utils/sessionManager";
 // ─── Status badge config ───────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
+  Open: {
+    label:  "Open Tab",
+    icon:   <Clock         size={12} />,
+    pill:   "bg-blue-400/15 text-blue-300 border border-blue-500/35",
+    accent: "border-l-2 border-blue-500/50",
+    floatBg: "bg-[#1e1e1e] border border-blue-500/40",
+    floatText: "text-blue-300",
+  },
   Pending: {
     label:  "Pending",
     icon:   <Clock         size={12} />,
@@ -123,11 +131,10 @@ function TrackerOrderCard({ order, onAddMore, dimmed = false }) {
         <StatusBadge status={order.status} />
       </div>
 
-      {/* "Ready" pulse banner */}
-      {order.status === "Ready" && (
-        <div className="mx-4 mb-3 px-3 py-2 rounded-xl bg-amber-400/10 border border-amber-400/30
-                        animate-pulse text-center">
-          <p className="text-amber-300 text-xs font-bold">🔔 Your order is ready — please collect!</p>
+      {/* "Open" status info - show if items have different statuses */}
+      {order.status === "Open" && order.items && (
+        <div className="mx-4 mb-3 px-3 py-2 rounded-xl bg-blue-400/10 border border-blue-400/30">
+          <p className="text-blue-300 text-xs font-bold text-center">📋 Tab is open - you can add more items!</p>
         </div>
       )}
 
@@ -274,15 +281,14 @@ export default function OrderTracker({
         ? fetched.filter((o) => !o.tableNumber || String(o.tableNumber) === sessionTable)
         : fetched;
 
-      // Wipe session when active order completes - ENHANCED RESET
+      // Wipe session when order is marked completed - ENHANCED RESET
       const prevOrders  = ordersRef.current;
-      const hadActive   = prevOrders.some((o) => o.status === "Pending" || o.status === "Preparing" || o.status === "Ready");
-      const nowHasActive = scoped.some((o) => o.status === "Pending" || o.status === "Preparing" || o.status === "Ready");
-      
+      const hadActive   = prevOrders.some((o) => o.status === "Open");
+      const nowHasActive = scoped.some((o) => o.status === "Open");
       
       // Use SessionManager for comprehensive reset
       if (hadActive && !nowHasActive) {
-        console.log('🔄 OrderTracker: All orders completed, triggering session reset');
+        console.log('🔄 OrderTracker: Order completed, triggering session reset');
         SessionManager.handleOrderCompletion();
       }
 
@@ -292,9 +298,9 @@ export default function OrderTracker({
     return unsub;
   }, [phone]);
 
-  // Active = most recent Pending / Preparing / Ready order
+  // Active = most recent Open order (orders can have items in various states)
   const activeOrder = orders.find(
-    (o) => o.status === "Pending" || o.status === "Preparing" || o.status === "Ready",
+    (o) => o.status === "Open",
   ) ?? null;
 
   // Up to 7 most-recent orders shown in the sheet (active + completed, ordered desc)
@@ -342,11 +348,11 @@ export default function OrderTracker({
             </span>
             <span className={`text-[10px] font-bold ${activeCfg.floatText}`}
                   style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}>
-              {activeOrder.status === "Ready" ? "Ready!" : "Order"}
+              {activeOrder.status === "Open" ? "Order" : "Order"}
             </span>
-            {/* Pulsing dot for Ready */}
-            {activeOrder.status === "Ready" && (
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            {/* Pulsing dot for open orders */}
+            {activeOrder.status === "Open" && (
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
             )}
           </motion.button>
         )}

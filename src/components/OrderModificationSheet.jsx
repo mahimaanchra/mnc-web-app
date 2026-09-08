@@ -242,6 +242,8 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
           variantLabel: e.variantLabel,
           price:        e.price,
           qty:          e.qty,
+          status:       "Pending", // Individual item status
+          addedAt:      new Date(),
         })),
         addedPrice: addedTotal,
         // ISO string — serverTimestamp() cannot be used inside arrayUnion payloads
@@ -269,7 +271,7 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
     }
   };
 
-  const isModifiable = order.status === "Pending" || order.status === "Preparing";
+  const isModifiable = order.status === "Open";
 
   return (
     <>
@@ -306,8 +308,8 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
             </h2>
             <p className="text-[#9a9a9a] text-xs mt-0.5">
               Table {order.tableNumber ?? "—"} ·{" "}
-              <span className={`font-semibold ${order.status === "Pending" ? "text-yellow-400" : "text-blue-400"}`}>
-                {order.status === "Pending" ? "⏳ Pending" : "👨‍🍳 Preparing"}
+              <span className={`font-semibold ${order.status === "Open" ? "text-blue-400" : "text-green-400"}`}>
+                {order.status === "Open" ? "🍽️ Open Tab" : "✅ Completed"}
               </span>
             </p>
           </div>
