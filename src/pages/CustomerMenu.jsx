@@ -431,14 +431,17 @@ function ItemCard({ item, onAddToCart }) {
   return (
     <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-      className={`bg-[#242424] border rounded-2xl overflow-hidden flex flex-col
-                  ${item.inStock ? "border-[#2e2e2e]" : "border-[#2e2e2e] opacity-60"}`}
+      className={`bg-[#242424] border rounded-2xl overflow-hidden flex flex-col transition-all duration-300
+                  ${item.inStock 
+                    ? "border-[#2e2e2e] hover:border-[#f5a623]/30 cursor-pointer" 
+                    : "border-[#2e2e2e] opacity-50 cursor-not-allowed grayscale pointer-events-none"}`}
     >
-      <div className="relative h-44 bg-[#1e1e1e] overflow-hidden flex-shrink-0 ">
+      <div className="relative h-44 bg-[#1e1e1e] overflow-hidden flex-shrink-0">
         {item.imageUrl && !imgErr
-          ? <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover"
+          ? <img src={item.imageUrl} alt={item.name} 
+              className={`w-full h-full object-cover transition-all duration-300 ${!item.inStock ? 'brightness-50 contrast-75' : ''}`}
               onError={() => setImgErr(true)} />
-          : <div className="absolute inset-0 flex items-center justify-center">
+          : <div className={`absolute inset-0 flex items-center justify-center ${!item.inStock ? 'opacity-50' : ''}`}>
               <UtensilsCrossed size={36} className="text-[#3a3a3a]" /></div>
         }
         <span className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-[#f5a623]
@@ -446,18 +449,27 @@ function ItemCard({ item, onAddToCart }) {
          {item.category}
         </span>
         {!item.inStock && (
-          <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-            <span className="bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full">
-              OUT OF STOCK
-            </span>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px] flex items-center justify-center">
+            <div className="text-center">
+              <span className="bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg">
+                OUT OF STOCK
+              </span>
+              <p className="text-white/80 text-[10px] mt-2 font-medium">
+                Currently unavailable
+              </p>
+            </div>
           </div>
         )}
       </div>
 
-      <div className="p-4 flex flex-col flex-1">
-        <h3 className="font-semibold text-white text-base leading-tight">{item.name}</h3>
+      <div className={`p-4 flex flex-col flex-1 ${!item.inStock ? 'opacity-70' : ''}`}>
+        <h3 className={`font-semibold text-base leading-tight ${item.inStock ? 'text-white' : 'text-white/60'}`}>
+          {item.name}
+        </h3>
         {item.description && (
-          <p className="text-[#9a9a9a] text-xs mt-1 leading-relaxed line-clamp-2">{item.description}</p>
+          <p className={`text-xs mt-1 leading-relaxed line-clamp-2 ${item.inStock ? 'text-[#9a9a9a]' : 'text-[#9a9a9a]/60'}`}>
+            {item.description}
+          </p>
         )}
 
         {item.variants?.length > 0 && (
@@ -467,10 +479,12 @@ function ItemCard({ item, onAddToCart }) {
               {item.variants.map((v) => (
                 <button key={v.label} type="button" disabled={!item.inStock}
                   onClick={() => setSelectedVariant(v)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors
-                              ${selectedVariant?.label === v.label
-                                ? "bg-[#f5a623] text-[#1a1a1a] border-[#f5a623]"
-                                : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#f5a623]/50"}`}>
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all duration-200 
+                              ${!item.inStock 
+                                ? "bg-[#1a1a1a]/50 text-[#9a9a9a]/40 border-[#3a3a3a]/50 cursor-not-allowed" 
+                                : selectedVariant?.label === v.label
+                                  ? "bg-[#f5a623] text-[#1a1a1a] border-[#f5a623]"
+                                  : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#f5a623]/50"}`}>
                   {v.label}<span className="ml-1 opacity-75">₹{v.price}</span>
                 </button>
               ))}
@@ -487,10 +501,12 @@ function ItemCard({ item, onAddToCart }) {
                 return (
                   <button key={a.label} type="button" disabled={!item.inStock}
                     onClick={() => toggleAddon(a)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors
-                                ${active
-                                  ? "bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/50"
-                                  : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#f5a623]/30"}`}>
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all duration-200
+                                ${!item.inStock 
+                                  ? "bg-[#1a1a1a]/50 text-[#9a9a9a]/40 border-[#3a3a3a]/50 cursor-not-allowed"
+                                  : active
+                                    ? "bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/50"
+                                    : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#f5a623]/30"}`}>
                     +{a.label}<span className="ml-1 opacity-75">₹{a.price}</span>
                   </button>
                 );
@@ -501,9 +517,11 @@ function ItemCard({ item, onAddToCart }) {
 
         <div className="mt-auto pt-4 flex items-center justify-between">
           <div>
-            <span className="text-[#f5a623] font-bold text-lg">₹{linePrice}</span>
+            <span className={`font-bold text-lg ${item.inStock ? 'text-[#f5a623]' : 'text-[#f5a623]/40'}`}>
+              ₹{linePrice}
+            </span>
             {addonTotal > 0 && (
-              <span className="text-[#9a9a9a] text-xs ml-1">
+              <span className={`text-xs ml-1 ${item.inStock ? 'text-[#9a9a9a]' : 'text-[#9a9a9a]/40'}`}>
                 (base ₹{selectedVariant?.price ?? 0} + ₹{addonTotal})
               </span>
             )}
@@ -517,12 +535,15 @@ function ItemCard({ item, onAddToCart }) {
                 variantLabel: selectedVariant.label, price: linePrice, addons: selectedAddons,
               });
             }}
-            className="flex items-center gap-1.5 bg-[#f5a623] hover:bg-[#e08a00]
-                       disabled:opacity-40 disabled:cursor-not-allowed
-                       text-[#1a1a1a] font-bold text-sm px-4 py-2.5 rounded-xl
-                       transition-colors shadow shadow-[#f5a623]/20
-                       min-h-[44px] active:scale-95">
-            <Plus size={15} />Add
+            className={`flex items-center gap-1.5 font-bold text-sm px-4 py-2.5 rounded-xl
+                       transition-all duration-200 shadow min-h-[44px] active:scale-95
+                       ${!item.inStock 
+                         ? "bg-gray-600 text-gray-400 cursor-not-allowed opacity-30"
+                         : !selectedVariant
+                           ? "bg-[#f5a623]/40 text-[#1a1a1a]/60 cursor-not-allowed"
+                           : "bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a] shadow-[#f5a623]/20"}`}>
+            <Plus size={15} />
+            {!item.inStock ? "Unavailable" : "Add"}
           </button>
         </div>
       </div>
@@ -534,6 +555,7 @@ function CheckoutModal({
   cart, tableNumber, onUpdateQty, onClose, onOrderPlaced,
   completedOrders, fetchProfile, recordOrder,
   prefilledPhone,   // already verified via PhoneGateModal — skips the phone step
+  items = [],       // menu items for stock validation
 }) {
   // Get session state safely from SessionManager or localStorage
   const sessionState = SessionManager.getSession ? SessionManager.getSession() : {
@@ -636,6 +658,21 @@ function CheckoutModal({
   const handlePlaceOrder = async () => {
     setSubmitting(true);
     try {
+      // Validate that all items in cart are still in stock
+      const outOfStockItems = [];
+      entries.forEach(([key, cartItem]) => {
+        const menuItem = items.find(item => item.id === cartItem.itemId);
+        if (!menuItem || !menuItem.inStock) {
+          outOfStockItems.push(cartItem.itemName);
+        }
+      });
+      
+      if (outOfStockItems.length > 0) {
+        setPhoneError(`Sorry, these items are no longer available: ${outOfStockItems.join(", ")}. Please remove them from your cart.`);
+        setSubmitting(false);
+        return;
+      }
+      
       const urlParams = new URLSearchParams(window.location.search);
       const isSpecialFilter = urlParams.get("filter") === "special";
       
@@ -1314,6 +1351,32 @@ export default function CustomerMenu() {
     });
   }, []);
 
+  // Clean cart of out-of-stock items when menu updates
+  useEffect(() => {
+    if (items.length === 0) return;
+    
+    setCart(prevCart => {
+      const updatedCart = { ...prevCart };
+      let hasRemovals = false;
+      
+      Object.entries(prevCart).forEach(([key, cartItem]) => {
+        const menuItem = items.find(item => item.id === cartItem.itemId);
+        if (!menuItem || !menuItem.inStock) {
+          delete updatedCart[key];
+          hasRemovals = true;
+        }
+      });
+      
+      // Show notification if items were removed
+      if (hasRemovals && Object.keys(prevCart).length > 0) {
+        console.log('Some items were removed from cart due to stock unavailability');
+        // You could add a toast notification here
+      }
+      
+      return updatedCart;
+    });
+  }, [items]);
+
   const categories    = getOrderedCategories(items);
   const allCategories = ["All", ...categories];
 
@@ -1447,10 +1510,12 @@ export default function CustomerMenu() {
         {!loading && items.length > 0 && (
           <div className="flex items-center justify-end mb-4">
             <button onClick={() => setShowOutOfStock((v) => !v)}
-              className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors
+              className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-all duration-200
+                          flex items-center gap-1.5
                           ${showOutOfStock
-                            ? "bg-[#2e2e2e] text-[#9a9a9a] border-[#3a3a3a] hover:text-white"
-                            : "bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30"}`}>
+                            ? "bg-[#2e2e2e] text-[#9a9a9a] border-[#3a3a3a] hover:text-white hover:border-[#4a4a4a]"
+                            : "bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30 hover:bg-[#f5a623]/15"}`}>
+              <div className={`w-2 h-2 rounded-full ${showOutOfStock ? 'bg-green-400' : 'bg-red-400'}`} />
               {showOutOfStock ? "Showing all items" : "Hiding out-of-stock"}
             </button>
           </div>
@@ -1566,6 +1631,7 @@ export default function CustomerMenu() {
           <CheckoutModal
             cart={cart}
             tableNumber={tableNumber}
+            items={items}
             onUpdateQty={handleUpdateQty}
             onClose={() => setCheckoutOpen(false)}
             prefilledPhone={verifiedPhone}
