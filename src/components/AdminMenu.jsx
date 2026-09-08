@@ -4,7 +4,10 @@ import {
   collection, addDoc, updateDoc, deleteDoc,
   doc, onSnapshot, serverTimestamp, query, orderBy,
 } from "firebase/firestore";
-import { db } from "../firebase/config";
+import {
+  ref, uploadBytes, getDownloadURL
+} from "firebase/storage";
+import { db, storage } from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import {
@@ -12,7 +15,8 @@ import {
   ToggleLeft, ToggleRight, ImageIcon, ChevronDown,
   Loader2, PackageX, UtensilsCrossed, ArrowLeft,
   LogOut, ClipboardList, LayoutGrid, Clock,
-  CheckCircle2, ChefHat, CircleDollarSign, Volume2, Sparkles, Archive
+  CheckCircle2, ChefHat, CircleDollarSign, Volume2, Sparkles, Archive,
+  Upload
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -34,6 +38,7 @@ const SAMPLE_IMAGES = [
 
 const EMPTY_FORM = {
   name: "", category: CATEGORIES[0], description: "", imageUrl: "",
+  imageFile: null,  // New: for file uploads
   variants: [{ label: "", price: "" }],
   addons:   [{ label: "", price: "" }],
   inStock: true,
@@ -513,6 +518,10 @@ export default function AdminMenu() {
   const [filterCategory, setFilterCategory] = useState("All");
   const [searchQuery]    = useState("");
   const [imgError,       setImgError]       = useState(false);
+  const [uploading,      setUploading]      = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [previewUrl,     setPreviewUrl]     = useState(null);
+  const fileInputRef = useRef(null);
 
   // Orders state & Crowd Management Sub-Filter (Active vs Completed)
   const [orders,          setOrders]          = useState([]);
@@ -611,7 +620,18 @@ export default function AdminMenu() {
     if (!validate()) return;
     setSaving(true);
     try {
-      const data = sanitizeItem(form);
+      let finalImageUrl = form.imageUrl;
+      
+      // If a file is selected, upload it first
+      if (form.imageFile) {
+        finalImageUrl = await uploadImageToFirebase(form.imageFile);
+      }
+      
+      const data = {
+        ...sanitizeItem(form),
+        imageUrl: finalImageUrl
+      };
+      
       if (editingId) {
         await updateDoc(doc(db, "menu_items", editingId), { ...data, updatedAt: serverTimestamp() });
       } else {
@@ -622,7 +642,7 @@ export default function AdminMenu() {
     } catch (err) {
       console.error("Save failed:", err);
       setSaving(false);
-      setErrors((p) => ({ ...p, submit: "Failed to save. Check connection and try again." }));
+      setErrors((p) => ({ ...p, submit: err.message || "Failed to save. Check connection and try again." }));
     }
   };
 
@@ -632,6 +652,72 @@ export default function AdminMenu() {
     try { await deleteDoc(doc(db, "menu_items", id)); }
     catch (err) { console.error(err); }
     finally { setDeletingId(null); }
+  };
+
+  // File upload handler
+  const handleFileSelect = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setImgError(true);
+      return;
+    }
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image file must be smaller than 5MB');
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => setPreviewUrl(e.target.result);
+    reader.readAsDataURL(file);
+
+    // Store file in form
+    setField("imageFile", file);
+    setField("imageUrl", ""); // Clear URL when file is selected
+    setImgError(false);
+  };
+
+  const uploadImageToFirebase = async (file) => {
+    if (!file) return null;
+
+    const timestamp = Date.now();
+    const fileName = `menu-items/${timestamp}_${file.name}`;
+    const storageRef = ref(storage, fileName);
+
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+
+      // Upload file
+      const snapshot = await uploadBytes(storageRef, file);
+      
+      // Get download URL
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      setUploadProgress(100);
+      return downloadURL;
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw new Error('Failed to upload image');
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const clearImageSelection = () => {
+    setField("imageFile", null);
+    setField("imageUrl", "");
+    setPreviewUrl(null);
+    setImgError(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleToggleStock = async (item) => {
@@ -657,6 +743,7 @@ export default function AdminMenu() {
     setForm({
       name: item.name || "", category: item.category || CATEGORIES[0],
       description: item.description || "", imageUrl: item.imageUrl || "",
+      imageFile: null, // Always null when editing existing item
       variants: item.variants?.length
         ? item.variants.map((v) => ({ label: v.label, price: String(v.price) }))
         : [{ label: "", price: "" }],
@@ -670,6 +757,7 @@ export default function AdminMenu() {
     setErrors({});
     setImgError(false);
     setShowForm(true);
+    clearImageSelection(); // Clear any previous file selection
   };
 
   const resetForm = () => {
@@ -679,6 +767,7 @@ export default function AdminMenu() {
     setImgError(false);
     setSaving(false);
     setShowForm(false);
+    clearImageSelection();
   };
 
   const handleOpenAdd = () => {
@@ -686,6 +775,7 @@ export default function AdminMenu() {
     setEditingId(null);
     setErrors({});
     setShowForm(true);
+    clearImageSelection();
   };
 
   const handleOrderStatus = async (orderId, newStatus) => {
@@ -858,48 +948,118 @@ export default function AdminMenu() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Item Image</label>
-                      <p className="text-xs text-gray-400 mb-2">Paste any direct image URL — previews instantly.</p>
-                      <div className="relative">
-                        <ImageIcon size={15}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                        <input type="url" value={form.imageUrl}
-                          onChange={(e) => { setImgError(false); setField("imageUrl", e.target.value); }}
-                          placeholder="https://images.unsplash.com/photo-…"
-                          className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-sm
-                                     bg-white text-gray-900
-                                     focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent" />
+                      <p className="text-xs text-gray-400 mb-3">Upload an image file or paste a URL — both work great!</p>
+                      
+                      {/* Upload Methods Toggle */}
+                      <div className="flex gap-2 mb-4">
+                        <div className="flex-1">
+                          <label className="block">
+                            <div className="cursor-pointer border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-amber-400 transition-colors">
+                              <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleFileSelect}
+                                className="hidden"
+                              />
+                              <Upload size={24} className="mx-auto text-gray-400 mb-2" />
+                              <p className="text-sm font-medium text-gray-600">Upload Image File</p>
+                              <p className="text-xs text-gray-400 mt-1">Click to browse files</p>
+                            </div>
+                          </label>
+                        </div>
+                        <div className="flex items-center text-gray-400 text-sm font-medium">OR</div>
+                        <div className="flex-1">
+                          <div className="relative">
+                            <ImageIcon size={15}
+                              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            <input 
+                              type="url" 
+                              value={form.imageUrl}
+                              onChange={(e) => { 
+                                setImgError(false); 
+                                setField("imageUrl", e.target.value);
+                                if (e.target.value) {
+                                  setField("imageFile", null); // Clear file when URL is entered
+                                  setPreviewUrl(null);
+                                  if (fileInputRef.current) {
+                                    fileInputRef.current.value = '';
+                                  }
+                                }
+                              }}
+                              placeholder="https://images.unsplash.com/photo-..."
+                              className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-sm
+                                         bg-white text-gray-900
+                                         focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent" />
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">Paste image URL</p>
+                        </div>
                       </div>
-                      {form.imageUrl && !imgError && (
-                        <div className="mt-3 relative inline-block">
-                          <img src={form.imageUrl} alt="preview"
-                            className="h-28 w-auto object-cover rounded-xl border border-gray-200 shadow-sm"
-                            onError={() => setImgError(true)} />
-                          <button type="button"
-                            onClick={() => { setField("imageUrl", ""); setImgError(false); }}
-                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white
-                                       rounded-full flex items-center justify-center shadow hover:bg-red-600">
-                            <X size={12} />
-                          </button>
+
+                      {/* Upload Progress */}
+                      {uploading && (
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+                            <span>Uploading image...</span>
+                            <span>{uploadProgress}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-amber-500 h-2 rounded-full transition-all duration-300" 
+                              style={{ width: `${uploadProgress}%` }}
+                            ></div>
+                          </div>
                         </div>
                       )}
-                      {form.imageUrl && imgError &&
-                        <p className="text-xs text-red-500 mt-1.5">⚠ Could not load this URL.</p>}
-                      <div className="mt-3">
-                        <p className="text-xs text-gray-400 mb-1.5">Quick samples:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {SAMPLE_IMAGES.map((s) => (
-                            <button key={s.label} type="button"
-                              onClick={() => { setImgError(false); setField("imageUrl", s.url); }}
-                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors
-                                          ${form.imageUrl === s.url
-                                            ? "bg-amber-500 text-white border-amber-500"
-                                            : "bg-white text-gray-600 border-gray-300 hover:border-amber-400 hover:text-amber-600"}`}>
-                              <img src={s.url} alt={s.label} className="w-4 h-4 rounded object-cover" />
-                              {s.label}
-                            </button>
-                          ))}
+
+                      {/* Image Preview */}
+                      {(previewUrl || (form.imageUrl && !imgError)) && (
+                        <div className="mt-3 relative inline-block">
+                          <img 
+                            src={previewUrl || form.imageUrl} 
+                            alt="preview"
+                            className="h-32 w-auto object-cover rounded-xl border border-gray-200 shadow-sm"
+                            onError={() => setImgError(true)} 
+                          />
+                          <button 
+                            type="button"
+                            onClick={clearImageSelection}
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white
+                                       rounded-full flex items-center justify-center shadow hover:bg-red-600 transition-colors">
+                            <X size={12} />
+                          </button>
+                          <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                            {form.imageFile ? '📁 File' : '🔗 URL'}
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {/* Error State */}
+                      {form.imageUrl && imgError && (
+                        <p className="text-xs text-red-500 mt-1.5">⚠ Could not load this URL.</p>
+                      )}
+
+                      {/* Quick Samples - only show if no image selected */}
+                      {!previewUrl && !form.imageUrl && (
+                        <div className="mt-3">
+                          <p className="text-xs text-gray-400 mb-1.5">Quick samples:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {SAMPLE_IMAGES.map((s) => (
+                              <button key={s.label} type="button"
+                                onClick={() => { 
+                                  setImgError(false); 
+                                  setField("imageUrl", s.url);
+                                  clearImageSelection();
+                                }}
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors
+                                           bg-white text-gray-600 border-gray-300 hover:border-amber-400 hover:text-amber-600">
+                                <img src={s.url} alt={s.label} className="w-4 h-4 rounded object-cover" />
+                                {s.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -958,9 +1118,11 @@ export default function AdminMenu() {
                         className="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold hover:bg-gray-50">
                         Cancel
                       </button>
-                      <button type="submit" disabled={saving}
+                      <button type="submit" disabled={saving || uploading}
                         className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-6 py-2.5 rounded-xl shadow transition-colors disabled:opacity-50">
-                        {saving ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : "Save Item"}
+                        {(saving || uploading) ? (
+                          <><Loader2 size={16} className="animate-spin" /> {uploading ? "Uploading..." : "Saving..."}</>
+                        ) : "Save Item"}
                       </button>
                     </div>
                   </form>
