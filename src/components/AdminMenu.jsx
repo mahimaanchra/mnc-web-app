@@ -4,10 +4,7 @@ import {
   collection, addDoc, updateDoc, deleteDoc,
   doc, onSnapshot, serverTimestamp, query, orderBy, getDoc,
 } from "firebase/firestore";
-import {
-  ref, uploadBytes, getDownloadURL
-} from "firebase/storage";
-import { db, storage } from "../firebase/config";
+import { db } from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import {
@@ -19,7 +16,50 @@ import {
   Upload, ChevronRight
 } from "lucide-react";
 
-// ─── Constants ─────────────────────────────────────────────────────────────────
+// Image compression utilities
+const compressImage = (file, maxWidth = 800, maxHeight = 600, quality = 0.8) => {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    img.onload = () => {
+      // Calculate new dimensions
+      let { width, height } = img;
+      
+      if (width > height) {
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = (width * maxHeight) / height;
+          height = maxHeight;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Draw and compress
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Convert to base64 with compression
+      const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(compressedDataUrl);
+    };
+    
+    img.src = URL.createObjectURL(file);
+  });
+};
+
+const validateImageSize = (base64String, maxSizeKB = 800) => {
+  // Base64 encoding increases size by ~33%, so we check actual bytes
+  const sizeInBytes = (base64String.length * 3) / 4;
+  const sizeInKB = sizeInBytes / 1024;
+  return sizeInKB <= maxSizeKB;
+};
 
 const CATEGORIES = [
   "Cold Coffee","Mocktails","Ice Tea","Shakes","Hot Beverages",
@@ -779,17 +819,8 @@ export default function AdminMenu() {
     if (!validate()) return;
     setSaving(true);
     try {
-      let finalImageUrl = form.imageUrl;
-      
-      // If a file is selected, upload it first
-      if (form.imageFile) {
-        finalImageUrl = await uploadImageToFirebase(form.imageFile);
-      }
-      
-      const data = {
-        ...sanitizeItem(form),
-        imageUrl: finalImageUrl
-      };
+      // imageUrl now contains either a URL string or Base64 data - both work directly
+      const data = sanitizeItem(form);
       
       if (editingId) {
         await updateDoc(doc(db, "menu_items", editingId), { ...data, updatedAt: serverTimestamp() });
@@ -813,7 +844,7 @@ export default function AdminMenu() {
     finally { setDeletingId(null); }
   };
 
-  // File upload handler
+  // File upload handler - Client-side compression to Base64
   const handleFileSelect = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -821,59 +852,61 @@ export default function AdminMenu() {
     // Validate file type
     if (!file.type.startsWith('image/')) {
       setImgError(true);
+      setErrors((p) => ({ ...p, imageUrl: "Please select a valid image file." }));
       return;
     }
 
-    // Validate file size (5MB limit)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image file must be smaller than 5MB');
+    // Validate file size (10MB limit before compression)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Image file must be smaller than 10MB');
       return;
     }
-
-    // Create preview
-    const reader = new FileReader();
-    reader.onload = (e) => setPreviewUrl(e.target.result);
-    reader.readAsDataURL(file);
-
-    // Store file in form
-    setField("imageFile", file);
-    setField("imageUrl", ""); // Clear URL when file is selected
-    setImgError(false);
-  };
-
-  const uploadImageToFirebase = async (file) => {
-    if (!file) return null;
-
-    const timestamp = Date.now();
-    const fileName = `menu-items/${timestamp}_${file.name}`;
-    const storageRef = ref(storage, fileName);
 
     try {
       setUploading(true);
-      setUploadProgress(0);
-
-      // Upload file
-      const snapshot = await uploadBytes(storageRef, file);
+      setUploadProgress(25);
       
-      // Get download URL
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      // Compress image to Base64
+      let compressedBase64 = await compressImage(file, 800, 600, 0.8);
+      setUploadProgress(75);
+      
+      // Check if compressed image fits Firestore limit
+      if (!validateImageSize(compressedBase64, 800)) {
+        // Try more aggressive compression
+        compressedBase64 = await compressImage(file, 600, 400, 0.6);
+        
+        if (!validateImageSize(compressedBase64, 800)) {
+          throw new Error("Image too large even after compression. Please use a smaller image.");
+        }
+      }
       
       setUploadProgress(100);
-      return downloadURL;
+      
+      // Store compressed Base64 in form
+      setField("imageUrl", compressedBase64);
+      setField("imageFile", null); // Clear file when Base64 is set
+      setPreviewUrl(compressedBase64);
+      setImgError(false);
+      setErrors((p) => ({ ...p, imageUrl: "" }));
+      
     } catch (error) {
-      console.error('Upload error:', error);
-      throw new Error('Failed to upload image');
+      console.error('Image compression failed:', error);
+      setImgError(true);
+      setErrors((p) => ({ ...p, imageUrl: error.message || "Failed to process image." }));
     } finally {
       setUploading(false);
       setUploadProgress(0);
     }
   };
 
+  // No longer need uploadImageToFirebase since we're using Base64
+  
   const clearImageSelection = () => {
     setField("imageFile", null);
     setField("imageUrl", "");
     setPreviewUrl(null);
     setImgError(false);
+    setErrors((p) => ({ ...p, imageUrl: "" }));
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -1152,7 +1185,7 @@ export default function AdminMenu() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Item Image</label>
-                      <p className="text-xs text-gray-400 mb-3">Upload an image file or paste a URL — both work great!</p>
+                      <p className="text-xs text-gray-400 mb-3">Upload an image file or paste a URL. Images are compressed to Base64 automatically.</p>
                       
                       {/* Upload Methods Toggle */}
                       <div className="flex gap-2 mb-4">
@@ -1167,8 +1200,8 @@ export default function AdminMenu() {
                                 className="hidden"
                               />
                               <Upload size={24} className="mx-auto text-gray-400 mb-2" />
-                              <p className="text-sm font-medium text-gray-600">Upload Image File</p>
-                              <p className="text-xs text-gray-400 mt-1">Click to browse files</p>
+                              <p className="text-sm font-medium text-gray-600">Upload & Compress</p>
+                              <p className="text-xs text-gray-400 mt-1">Auto-compressed to Base64</p>
                             </div>
                           </label>
                         </div>
@@ -1179,12 +1212,12 @@ export default function AdminMenu() {
                               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                             <input 
                               type="url" 
-                              value={form.imageUrl}
+                              value={form.imageUrl.startsWith('data:') ? '' : form.imageUrl}
                               onChange={(e) => { 
                                 setImgError(false); 
                                 setField("imageUrl", e.target.value);
                                 if (e.target.value) {
-                                  setField("imageFile", null); // Clear file when URL is entered
+                                  setField("imageFile", null);
                                   setPreviewUrl(null);
                                   if (fileInputRef.current) {
                                     fileInputRef.current.value = '';
@@ -1204,7 +1237,7 @@ export default function AdminMenu() {
                       {uploading && (
                         <div className="mb-3">
                           <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                            <span>Uploading image...</span>
+                            <span>Compressing image...</span>
                             <span>{uploadProgress}%</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
@@ -1233,14 +1266,16 @@ export default function AdminMenu() {
                             <X size={12} />
                           </button>
                           <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                            {form.imageFile ? '📁 File' : '🔗 URL'}
+                            {form.imageUrl.startsWith('data:') ? '📦 Base64' : '🔗 URL'}
                           </div>
                         </div>
                       )}
 
                       {/* Error State */}
-                      {form.imageUrl && imgError && (
-                        <p className="text-xs text-red-500 mt-1.5">⚠ Could not load this URL.</p>
+                      {((form.imageUrl && imgError) || errors.imageUrl) && (
+                        <p className="text-xs text-red-500 mt-1.5">
+                          ⚠ {errors.imageUrl || "Could not load this image."}
+                        </p>
                       )}
 
                       {/* Quick Samples - only show if no image selected */}
@@ -1325,7 +1360,7 @@ export default function AdminMenu() {
                       <button type="submit" disabled={saving || uploading}
                         className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-6 py-2.5 rounded-xl shadow transition-colors disabled:opacity-50">
                         {(saving || uploading) ? (
-                          <><Loader2 size={16} className="animate-spin" /> {uploading ? "Uploading..." : "Saving..."}</>
+                          <><Loader2 size={16} className="animate-spin" /> {uploading ? "Compressing..." : "Saving..."}</>
                         ) : "Save Item"}
                       </button>
                     </div>
