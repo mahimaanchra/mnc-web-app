@@ -6,7 +6,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Plus, Trash2, Pencil, X, Check,
   ToggleLeft, ToggleRight, ImageIcon, ChevronDown,
