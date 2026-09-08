@@ -13,7 +13,6 @@ export default function App() {
       <Router>
         <Routes>
           {/* Public */}
-          //routes
           <Route path="/"            element={<HomePage />} />
           <Route path="/menu"        element={<CustomerMenu />} />
           <Route path="/admin/login" element={<AdminLogin />} />
