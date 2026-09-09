@@ -413,8 +413,19 @@ function ItemCard({ item, onAddToCart }) {
   const [selectedAddons,  setSelectedAddons]  = useState([]);
   const [imgErr,          setImgErr]          = useState(false);
 
+  // Check if item has available variants or is available at item level
+  const hasAvailableVariants = item.variants?.length > 0 
+    ? item.variants.some(v => v.inStock !== false) 
+    : item.inStock;
+
   useEffect(() => {
-    setSelectedVariant(item.variants?.[0] ?? null);
+    // Auto-select first available variant
+    if (item.variants?.length > 0) {
+      const firstAvailable = item.variants.find(v => v.inStock !== false);
+      setSelectedVariant(firstAvailable || item.variants[0]);
+    } else {
+      setSelectedVariant(null);
+    }
     setSelectedAddons([]);
   }, [item.id, item.variants]);
 
@@ -432,23 +443,23 @@ function ItemCard({ item, onAddToCart }) {
     <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
       className={`bg-[#242424] border rounded-2xl overflow-hidden flex flex-col transition-all duration-300
-                  ${item.inStock 
+                  ${hasAvailableVariants 
                     ? "border-[#2e2e2e] hover:border-[#f5a623]/30 cursor-pointer" 
                     : "border-[#2e2e2e] opacity-50 cursor-not-allowed grayscale pointer-events-none"}`}
     >
       <div className="relative h-44 bg-[#1e1e1e] overflow-hidden flex-shrink-0">
         {item.imageUrl && !imgErr
           ? <img src={item.imageUrl} alt={item.name} 
-              className={`w-full h-full object-cover transition-all duration-300 ${!item.inStock ? 'brightness-50 contrast-75' : ''}`}
+              className={`w-full h-full object-cover transition-all duration-300 ${!hasAvailableVariants ? 'brightness-50 contrast-75' : ''}`}
               onError={() => setImgErr(true)} />
-          : <div className={`absolute inset-0 flex items-center justify-center ${!item.inStock ? 'opacity-50' : ''}`}>
+          : <div className={`absolute inset-0 flex items-center justify-center ${!hasAvailableVariants ? 'opacity-50' : ''}`}>
               <UtensilsCrossed size={36} className="text-[#3a3a3a]" /></div>
         }
         <span className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-[#f5a623]
                          text-xs font-semibold px-2.5 py-1 rounded-full border border-[#f5a623]/20">
          {item.category}
         </span>
-        {!item.inStock && (
+        {!hasAvailableVariants && (
           <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px] flex items-center justify-center">
             <div className="text-center">
               <span className="bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg">
@@ -462,12 +473,12 @@ function ItemCard({ item, onAddToCart }) {
         )}
       </div>
 
-      <div className={`p-4 flex flex-col flex-1 ${!item.inStock ? 'opacity-70' : ''}`}>
-        <h3 className={`font-semibold text-base leading-tight ${item.inStock ? 'text-white' : 'text-white/60'}`}>
+      <div className={`p-4 flex flex-col flex-1 ${!hasAvailableVariants ? 'opacity-70' : ''}`}>
+        <h3 className={`font-semibold text-base leading-tight ${hasAvailableVariants ? 'text-white' : 'text-white/60'}`}>
           {item.name}
         </h3>
         {item.description && (
-          <p className={`text-xs mt-1 leading-relaxed line-clamp-2 ${item.inStock ? 'text-[#9a9a9a]' : 'text-[#9a9a9a]/60'}`}>
+          <p className={`text-xs mt-1 leading-relaxed line-clamp-2 ${hasAvailableVariants ? 'text-[#9a9a9a]' : 'text-[#9a9a9a]/60'}`}>
             {item.description}
           </p>
         )}
@@ -476,18 +487,22 @@ function ItemCard({ item, onAddToCart }) {
           <div className="mt-3">
             <p className="text-[#9a9a9a] text-xs mb-1.5">Size / Type</p>
             <div className="flex flex-wrap gap-1.5">
-              {item.variants.map((v) => (
-                <button key={v.label} type="button" disabled={!item.inStock}
-                  onClick={() => setSelectedVariant(v)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all duration-200 
-                              ${!item.inStock 
-                                ? "bg-[#1a1a1a]/50 text-[#9a9a9a]/40 border-[#3a3a3a]/50 cursor-not-allowed" 
-                                : selectedVariant?.label === v.label
-                                  ? "bg-[#f5a623] text-[#1a1a1a] border-[#f5a623]"
-                                  : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#f5a623]/50"}`}>
-                  {v.label}<span className="ml-1 opacity-75">₹{v.price}</span>
-                </button>
-              ))}
+              {item.variants.map((v) => {
+                const isVariantInStock = v.inStock !== false; 
+                return (
+                  <button key={v.label} type="button" disabled={!isVariantInStock}
+                    onClick={() => setSelectedVariant(v)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all duration-200 
+                                ${!isVariantInStock 
+                                  ? "bg-[#1a1a1a]/50 text-[#9a9a9a]/40 border-[#3a3a3a]/50 cursor-not-allowed" 
+                                  : selectedVariant?.label === v.label
+                                    ? "bg-[#f5a623] text-[#1a1a1a] border-[#f5a623]"
+                                    : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#f5a623]/50"}`}>
+                    {v.label}<span className="ml-1 opacity-75">₹{v.price}</span>
+                    {!isVariantInStock && <span className="ml-1 text-red-400 text-[10px]">(Out)</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -499,10 +514,10 @@ function ItemCard({ item, onAddToCart }) {
               {item.addons.map((a) => {
                 const active = selectedAddons.some((s) => s.label === a.label);
                 return (
-                  <button key={a.label} type="button" disabled={!item.inStock}
+                  <button key={a.label} type="button" disabled={!hasAvailableVariants}
                     onClick={() => toggleAddon(a)}
                     className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all duration-200
-                                ${!item.inStock 
+                                ${!hasAvailableVariants 
                                   ? "bg-[#1a1a1a]/50 text-[#9a9a9a]/40 border-[#3a3a3a]/50 cursor-not-allowed"
                                   : active
                                     ? "bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/50"
@@ -517,17 +532,17 @@ function ItemCard({ item, onAddToCart }) {
 
         <div className="mt-auto pt-4 flex items-center justify-between">
           <div>
-            <span className={`font-bold text-lg ${item.inStock ? 'text-[#f5a623]' : 'text-[#f5a623]/40'}`}>
+            <span className={`font-bold text-lg ${hasAvailableVariants ? 'text-[#f5a623]' : 'text-[#f5a623]/40'}`}>
               ₹{linePrice}
             </span>
             {addonTotal > 0 && (
-              <span className={`text-xs ml-1 ${item.inStock ? 'text-[#9a9a9a]' : 'text-[#9a9a9a]/40'}`}>
+              <span className={`text-xs ml-1 ${hasAvailableVariants ? 'text-[#9a9a9a]' : 'text-[#9a9a9a]/40'}`}>
                 (base ₹{selectedVariant?.price ?? 0} + ₹{addonTotal})
               </span>
             )}
           </div>
           <button type="button"
-            disabled={!item.inStock || !selectedVariant}
+            disabled={!hasAvailableVariants || !selectedVariant || (selectedVariant && selectedVariant.inStock === false)}
             onClick={() => {
               if (!selectedVariant) return;
               onAddToCart({
@@ -537,13 +552,13 @@ function ItemCard({ item, onAddToCart }) {
             }}
             className={`flex items-center gap-1.5 font-bold text-sm px-4 py-2.5 rounded-xl
                        transition-all duration-200 shadow min-h-[44px] active:scale-95
-                       ${!item.inStock 
+                       ${!hasAvailableVariants || (selectedVariant && selectedVariant.inStock === false) 
                          ? "bg-gray-600 text-gray-400 cursor-not-allowed opacity-30"
                          : !selectedVariant
                            ? "bg-[#f5a623]/40 text-[#1a1a1a]/60 cursor-not-allowed"
                            : "bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a] shadow-[#f5a623]/20"}`}>
             <Plus size={15} />
-            {!item.inStock ? "Unavailable" : "Add"}
+            {!hasAvailableVariants || (selectedVariant && selectedVariant.inStock === false) ? "Unavailable" : "Add"}
           </button>
         </div>
       </div>
@@ -662,8 +677,15 @@ function CheckoutModal({
       const outOfStockItems = [];
       entries.forEach(([key, cartItem]) => {
         const menuItem = items.find(item => item.id === cartItem.itemId);
-        if (!menuItem || !menuItem.inStock) {
+        if (!menuItem) {
           outOfStockItems.push(cartItem.itemName);
+        } else {
+          // Check if the specific variant is still in stock
+          const selectedVariant = menuItem.variants?.find(v => v.label === cartItem.variantLabel);
+          const isVariantAvailable = selectedVariant ? selectedVariant.inStock !== false : menuItem.inStock;
+          if (!isVariantAvailable) {
+            outOfStockItems.push(cartItem.itemName);
+          }
         }
       });
       
@@ -1165,81 +1187,243 @@ function CheckoutModal({
   );
 }
 
-// ─── Cart Drawer ───────────────────────────────────────────────────────────────
+// ─── MNC Specials Upsell Section ───────────────────────────────────────────────
 
-function CartDrawer({ cart, onUpdateQty, onClose, onCheckout }) {
-  const entries = Object.entries(cart);
-  const total   = cartTotal(cart);
+function MncSpecialsUpsell({ items, onAddToCart, currentCart }) {
+  // Get MNC Special items that are in stock and not already in cart
+  const mncSpecials = items.filter(item => {
+    if (!item.isMncSpecial) return false;
+    
+    // Check if item has available variants or is available at item level
+    const hasAvailableVariants = item.variants?.length > 0 
+      ? item.variants.some(v => v.inStock !== false) 
+      : item.inStock;
+    
+    if (!hasAvailableVariants) return false;
+    
+    // Check if any variant is already in cart
+    const isInCart = item.variants?.length > 0 
+      ? item.variants.some(variant => currentCart[cartKey(item.id, variant.label)])
+      : currentCart[cartKey(item.id, 'default')];
+    
+    return !isInCart;
+  });
+
+  if (mncSpecials.length === 0) return null;
 
   return (
-    <motion.div key="cart-drawer"
-      initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
-      transition={{ type: "spring", damping: 28, stiffness: 280 }}
-      className="fixed inset-y-0 right-0 w-full sm:w-[380px] bg-[#1e1e1e]
-                 border-l border-[#2e2e2e] z-40 flex flex-col shadow-2xl">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-[#2e2e2e]">
-        <h2 className="text-white font-bold text-base flex items-center gap-2">
-          <ShoppingCart size={18} className="text-[#f5a623]" /> Your Cart
-        </h2>
-        <button onClick={onClose}
-          className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
-          <X size={18} />
+    <div className="mb-6">
+      <h3 className="text-white font-bold text-lg mb-3 flex items-center gap-2">
+        <Gift className="text-[#f5a623]" size={20} />
+        Complete Your Meal With
+      </h3>
+      
+      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+        {mncSpecials.slice(0, 5).map(item => { // Show max 5 recommendations
+          const defaultVariant = item.variants?.find(v => v.inStock !== false) || item.variants?.[0];
+          // eslint-disable-next-line no-unused-vars
+          const price = defaultVariant?.price || 0;
+          
+          return (
+            <div key={item.id} className="flex-shrink-0 w-48 bg-[#1a1a1a] border border-[#2e2e2e] rounded-xl p-3">
+              {/* Item Image */}
+              <div className="relative h-24 bg-[#2e2e2e] rounded-lg mb-2 overflow-hidden">
+                {item.imageUrl ? (
+                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <UtensilsCrossed size={20} className="text-[#3a3a3a]" />
+                  </div>
+                )}
+                <div className="absolute top-1 right-1">
+                  <span className="bg-[#f5a623] text-[#1a1a1a] text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    MNC Special
+                  </span>
+                </div>
+              </div>
+              
+              {/* Item Details */}
+              <div className="space-y-2">
+                <h4 className="text-white font-semibold text-sm leading-tight line-clamp-1">
+                  {item.name}
+                </h4>
+                
+                {defaultVariant && (
+                  <p className="text-[#9a9a9a] text-xs">
+                    {defaultVariant.label} • ₹{defaultVariant.price}
+                  </p>
+                )}
+                
+                <button
+                  onClick={() => {
+                    if (defaultVariant) {
+                      onAddToCart({
+                        itemId: item.id,
+                        itemName: item.name,
+                        variantLabel: defaultVariant.label,
+                        price: defaultVariant.price,
+                        addons: [],
+                      });
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-1 
+                             bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a]
+                             font-bold text-xs py-2 rounded-lg transition-colors"
+                >
+                  <Plus size={12} />
+                  Add
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Full Screen Cart ──────────────────────────────────────────────────────────
+
+function FullScreenCart({ cart, onUpdateQty, onClose, onCheckout, onAddToCart, items }) {
+  const entries = Object.entries(cart);
+  const total = cartTotal(cart);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-[#1a1a1a] z-50 flex flex-col"
+    >
+      {/* Header with back button */}
+      <div className="flex items-center justify-between px-4 py-4 bg-[#242424] border-b border-[#2e2e2e]">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-2 text-[#9a9a9a] hover:text-white transition-colors"
+        >
+          <ArrowLeft size={20} />
+          <span className="font-medium">Back</span>
         </button>
+        <h1 className="text-white font-bold text-lg">Your Cart</h1>
+        <div className="w-16"></div> {/* Spacer for center alignment */}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+      {/* Cart Items */}
+      <div className="flex-1 overflow-y-auto px-4 py-6">
         {entries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-16">
-            <ShoppingCart size={40} className="text-[#3a3a3a] mb-3" />
-            <p className="text-[#9a9a9a] text-sm">Your cart is empty.</p>
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <ShoppingCart size={64} className="text-[#3a3a3a] mb-4" />
+            <h3 className="text-white text-xl font-semibold mb-2">Your cart is empty</h3>
+            <p className="text-[#9a9a9a] text-sm">Browse our menu to add items</p>
           </div>
-        ) : entries.map(([key, entry]) => (
-          <div key={key} className="bg-[#242424] border border-[#2e2e2e] rounded-xl p-3
-                                    flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-medium truncate">{entry.itemName}</p>
-              <p className="text-[#9a9a9a] text-xs mt-0.5">{entry.variantLabel}</p>
-              {entry.addons?.length > 0 && (
-                <p className="text-[#f5a623]/70 text-xs mt-0.5">
-                  + {entry.addons.map((a) => a.label).join(", ")}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button onClick={() => onUpdateQty(key, -1)}
-                className="w-7 h-7 rounded-lg bg-[#1a1a1a] border border-[#3a3a3a]
-                           flex items-center justify-center text-[#9a9a9a]
-                           hover:text-white hover:border-[#f5a623]/50 transition-colors">
-                <Minus size={12} />
-              </button>
-              <span className="text-white font-semibold text-sm w-5 text-center">{entry.qty}</span>
-              <button onClick={() => onUpdateQty(key, +1)}
-                className="w-7 h-7 rounded-lg bg-[#1a1a1a] border border-[#3a3a3a]
-                           flex items-center justify-center text-[#9a9a9a]
-                           hover:text-white hover:border-[#f5a623]/50 transition-colors">
-                <Plus size={12} />
-              </button>
-            </div>
-            <span className="text-[#f5a623] font-bold text-sm flex-shrink-0 w-16 text-right">
-              ₹{entry.price * entry.qty}
-            </span>
+        ) : (
+          <div className="max-w-md mx-auto space-y-4">
+            {entries.map(([key, entry]) => (
+              <div key={key} className="bg-[#242424] border border-[#2e2e2e] rounded-2xl p-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-white font-semibold text-base mb-1">{entry.itemName}</h3>
+                    
+                    {/* Variant Details */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="bg-[#f5a623]/10 text-[#f5a623] text-xs font-medium px-2 py-1 rounded-lg">
+                        {entry.variantLabel}
+                      </span>
+                    </div>
+                    
+                    {/* Selected Add-ons */}
+                    {entry.addons?.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-[#9a9a9a] text-xs font-medium mb-1">Add-ons:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {entry.addons.map((addon, idx) => (
+                            <span key={idx} className="bg-[#1a1a1a] text-[#9a9a9a] text-xs px-2 py-1 rounded-lg border border-[#3a3a3a]">
+                              +{addon.label} (₹{addon.price})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Price per unit */}
+                    <p className="text-[#9a9a9a] text-sm">₹{entry.price} each</p>
+                  </div>
+                  
+                  {/* Quantity Controls */}
+                  <div className="flex flex-col items-end gap-3 flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onUpdateQty(key, -1)}
+                        className="w-8 h-8 rounded-lg bg-[#1a1a1a] border border-[#3a3a3a] 
+                                   flex items-center justify-center text-[#9a9a9a]
+                                   hover:text-white hover:border-[#f5a623]/50 transition-colors"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <span className="text-white font-semibold text-base w-8 text-center">
+                        {entry.qty}
+                      </span>
+                      <button
+                        onClick={() => onUpdateQty(key, +1)}
+                        className="w-8 h-8 rounded-lg bg-[#1a1a1a] border border-[#3a3a3a]
+                                   flex items-center justify-center text-[#9a9a9a]
+                                   hover:text-white hover:border-[#f5a623]/50 transition-colors"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                    
+                    {/* Total price for this item */}
+                    <span className="text-[#f5a623] font-bold text-lg">
+                      ₹{entry.price * entry.qty}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
 
+      {/* Bill Summary & Checkout */}
       {entries.length > 0 && (
-        <div className="px-5 py-4 border-t border-[#2e2e2e] space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[#9a9a9a] text-sm">Total</span>
-            <span className="text-white font-bold text-xl">₹{total}</span>
+        <div className="bg-[#242424] border-t border-[#2e2e2e] px-4 py-6 space-y-6">
+          <div className="max-w-md mx-auto">
+            {/* MNC Specials Upsell Section */}
+            <MncSpecialsUpsell items={items} onAddToCart={onAddToCart} currentCart={cart} />
+            
+            {/* Bill Summary */}
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#9a9a9a]">Subtotal ({cartCount(cart)} items)</span>
+                  <span className="text-white font-medium">₹{total}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#9a9a9a]">Service Fee</span>
+                  <span className="text-white font-medium">₹0</span>
+                </div>
+                <div className="border-t border-[#2e2e2e] pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-white font-semibold text-lg">Total</span>
+                    <span className="text-[#f5a623] font-bold text-2xl">₹{total}</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Checkout Button */}
+              <button
+                onClick={onCheckout}
+                className="w-full flex items-center justify-center gap-2
+                           bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a]
+                           font-bold py-4 rounded-2xl transition-colors
+                           shadow-lg shadow-[#f5a623]/20 text-base"
+              >
+                <ShoppingBag size={18} />
+                Proceed to Checkout
+              </button>
+            </div>
           </div>
-          <button onClick={onCheckout}
-            className="w-full flex items-center justify-center gap-2
-                       bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a]
-                       font-bold py-3.5 rounded-xl transition-colors
-                       shadow-lg shadow-[#f5a623]/20 text-sm">
-            Proceed to Checkout <ChevronRight size={16} />
-          </button>
         </div>
       )}
     </motion.div>
@@ -1363,9 +1547,17 @@ export default function CustomerMenu() {
       
       Object.entries(prevCart).forEach(([key, cartItem]) => {
         const menuItem = items.find(item => item.id === cartItem.itemId);
-        if (!menuItem || !menuItem.inStock) {
+        if (!menuItem) {
           delete updatedCart[key];
           hasRemovals = true;
+        } else {
+          // Check if the specific variant is still in stock
+          const selectedVariant = menuItem.variants?.find(v => v.label === cartItem.variantLabel);
+          const isVariantAvailable = selectedVariant ? selectedVariant.inStock !== false : menuItem.inStock;
+          if (!isVariantAvailable) {
+            delete updatedCart[key];
+            hasRemovals = true;
+          }
         }
       });
       
@@ -1390,7 +1582,11 @@ export default function CustomerMenu() {
       ? (item.special || item.isMncSpecial)
       : (activeCategory === "All" || item.category === activeCategory);
 
-    const matchStock = showOutOfStock || item.inStock;
+    const hasAvailableVariants = item.variants?.length > 0 
+      ? item.variants.some(v => v.inStock !== false) 
+      : item.inStock;
+    
+    const matchStock = showOutOfStock || hasAvailableVariants;
     return matchFilter && matchStock;
   });
 
@@ -1507,7 +1703,7 @@ export default function CustomerMenu() {
         <StreakBanner completedOrders={completedOrders} />
       )}
 
-      <main className="px-4 py-4 pb-24">
+      <main className="px-4 py-4 pb-20">
 
         {!loading && items.length > 0 && (
           <div className="flex items-center justify-end mb-4">
@@ -1583,20 +1779,19 @@ export default function CustomerMenu() {
             initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ type: "spring", damping: 22, stiffness: 260 }}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50
-                       w-[92%] max-w-md px-4"
-            style={{ bottom: "max(16px, env(safe-area-inset-bottom, 16px))" }}>
-            <button onClick={() => setCartOpen(true)}
-              className="w-full flex items-center justify-between
-                         bg-[#f5a623] text-[#1a1a1a] font-bold
-                         px-5 py-3.5 rounded-2xl shadow-xl shadow-[#f5a623]/30
-                         min-h-[52px]">
-              <span className="bg-[#1a1a1a]/20 px-2 py-0.5 rounded-lg text-sm">
+            className="fixed bottom-0 left-0 right-0 z-50 bg-amber-300 px-4 py-3"
+            style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom, 12px))" }}>
+            <div className="max-w-md mx-auto flex items-center justify-between">
+              <span className="text-black font-medium">
                 {count} item{count > 1 ? "s" : ""}
               </span>
-              <span className="text-sm">View Order</span>
-              <span className="text-sm">₹{cartTotal(cart)}</span>
-            </button>
+              <button 
+                onClick={() => setCartOpen(true)}
+                className="text-black font-medium flex items-center gap-1 hover:opacity-80 transition-opacity">
+                View Cart
+                <ChevronRight size={16} />
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1604,25 +1799,23 @@ export default function CustomerMenu() {
       <AnimatePresence>
         {cartOpen && (
           <>
-            <motion.div key="cart-backdrop"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setCartOpen(false)}
-              className="fixed inset-0 bg-black/60 z-30 backdrop-blur-sm" />
-            <CartDrawer
-              cart={cart}
-              onUpdateQty={handleUpdateQty}
-              onClose={() => setCartOpen(false)}
-              onCheckout={() => {
-                setCartOpen(false);
-                // Intercept: if there's a live Open order, ask first
-                const canModify = activeOrder && activeOrder.status === "Open";
-                if (canModify) {
-                  setAddOrNewOpen(true);
-                } else {
-                  setCheckoutOpen(true);
-                }
-              }}
-            />
+          <FullScreenCart
+            cart={cart}
+            items={items}
+            onUpdateQty={handleUpdateQty}
+            onAddToCart={handleAddToCart}
+            onClose={() => setCartOpen(false)}
+            onCheckout={() => {
+              setCartOpen(false);
+              // Intercept: if there's a live Open order, ask first
+              const canModify = activeOrder && activeOrder.status === "Open";
+              if (canModify) {
+                setAddOrNewOpen(true);
+              } else {
+                setCheckoutOpen(true);
+              }
+            }}
+          />
           </>
         )}
       </AnimatePresence>

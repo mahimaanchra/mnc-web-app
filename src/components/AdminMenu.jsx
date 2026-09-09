@@ -79,7 +79,7 @@ const SAMPLE_IMAGES = [
 const EMPTY_FORM = {
   name: "", category: CATEGORIES[0], description: "", imageUrl: "",
   imageFile: null,  // New: for file uploads
-  variants: [{ label: "", price: "" }],
+  variants: [{ label: "", price: "", inStock: true }],
   addons:   [{ label: "", price: "" }],
   inStock: true,
   isMncSpecial: false,
@@ -98,15 +98,14 @@ const STATUS_META = {
   Ready:     { color: "bg-amber-500/15 text-amber-400 border-amber-500/30",    icon: <CheckCircle2 size={13} /> },
 };
 
-// ─── Web Audio API — Singleton Context with Pending Queue ────────────────────
-// Strategy:
-//   - AudioContext is created on the FIRST user gesture (resumeAudioCtx), not
-//     lazily in playOrderChime. This guarantees it starts in "running" state.
-//   - Firestore-triggered chimes that arrive before any gesture are queued.
-//   - The queue is drained immediately when the user next clicks anything.
-//   - ctx.resume() is still called defensively before each tone.
+// ─── Simplified Single-Play Audio Notification System ──────────────────────────
+// Features:
+//   - Single loud alert per event (no looping)
+//   - Two distinct sounds: New Order vs Item Addition
+//   - Clean interface without acknowledgment buttons
+//   - Prevents audio irritation from multiple orders
 
-let _audioCtx    = null;
+let _audioCtx = null;
 let _pendingChime = null; // "order" | "modification" | null — last pending chime type
 
 function resumeAudioCtx() {
@@ -119,64 +118,101 @@ function resumeAudioCtx() {
     _audioCtx.resume().then(() => {
       // Drain any queued chime now that the context is running
       if (_pendingChime === "modification") _playModificationTones();
-      else if (_pendingChime === "order")   _playOrderTones();
+      else if (_pendingChime === "order") _playOrderTones();
       _pendingChime = null;
     });
   } else {
     // Context already running — still drain pending if any
     if (_pendingChime === "modification") _playModificationTones();
-    else if (_pendingChime === "order")   _playOrderTones();
+    else if (_pendingChime === "order") _playOrderTones();
     _pendingChime = null;
   }
 }
 
+// Single-play new order notification - Loud and attention-grabbing
 function _playOrderTones() {
   const ctx = _audioCtx;
   if (!ctx) return;
   try {
-    const osc  = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.6);
+    // NEW ORDER: Loud rising urgent chime sequence
+    const playSequence = () => {
+      // Tone 1 - Alert start (low to mid) - LOUDER
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(440, ctx.currentTime); // A4
+      osc1.frequency.exponentialRampToValueAtTime(659.25, ctx.currentTime + 0.15); // E5
+      gain1.gain.setValueAtTime(0.9, ctx.currentTime); // Increased volume
+      gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start();
+      osc1.stop(ctx.currentTime + 0.3);
+
+      // Tone 2 - Attention peak (high) - LOUDER
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = "triangle";
+      osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.4); // A5
+      gain2.gain.setValueAtTime(1.0, ctx.currentTime + 0.4); // Maximum safe volume
+      gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.7);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(ctx.currentTime + 0.4);
+      osc2.stop(ctx.currentTime + 0.7);
+
+      // Tone 3 - Confirmation (mid to high) - LOUDER
+      const osc3 = ctx.createOscillator();
+      const gain3 = ctx.createGain();
+      osc3.type = "sine";
+      osc3.frequency.setValueAtTime(523.25, ctx.currentTime + 0.8); // C5
+      osc3.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 1.1); // C6
+      gain3.gain.setValueAtTime(0.9, ctx.currentTime + 0.8); // Increased volume
+      gain3.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.4);
+      osc3.connect(gain3);
+      gain3.connect(ctx.destination);
+      osc3.start(ctx.currentTime + 0.8);
+      osc3.stop(ctx.currentTime + 1.4);
+    };
+
+    playSequence();
   } catch (err) {
     console.error("_playOrderTones error:", err);
   }
 }
 
+// Single-play item addition notification - Distinct from new orders
 function _playModificationTones() {
   const ctx = _audioCtx;
   if (!ctx) return;
   try {
-    const playTone = (freq, startTime, duration) => {
-      const osc  = ctx.createOscillator();
+    // ITEM ADDITION: Loud double-bounce notification pattern
+    const playTone = (freq, startTime, duration, volume = 0.8, waveType = "square") => {
+      const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = "triangle";
+      osc.type = waveType;
       osc.frequency.setValueAtTime(freq, startTime);
-      gain.gain.setValueAtTime(0.25, startTime);
+      gain.gain.setValueAtTime(volume, startTime);
       gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start(startTime);
       osc.stop(startTime + duration);
     };
-    playTone(660, ctx.currentTime,        0.18);
-    playTone(880, ctx.currentTime + 0.22, 0.18);
+    
+    // Distinctive loud double-bounce pattern for modifications
+    playTone(698.46, ctx.currentTime, 0.12, 0.9, "triangle"); // F5 - short, louder
+    playTone(698.46, ctx.currentTime + 0.15, 0.12, 0.9, "triangle"); // F5 - short (bounce), louder
+    playTone(932.33, ctx.currentTime + 0.35, 0.2, 1.0, "sine"); // Bb5 - longer confirmation, loudest
   } catch (err) {
     console.error("_playModificationTones error:", err);
   }
 }
 
+// Simple single-play notification functions
 function playOrderChime() {
   const ctx = _audioCtx;
   if (!ctx || ctx.state === "suspended") {
-    // No unlocked context yet — queue and wait for next user gesture
     _pendingChime = "order";
     return;
   }
@@ -203,7 +239,11 @@ const sanitizeItem = (form) => ({
   imageUrl:     form.imageUrl.trim(),
   variants: form.variants
     .filter((v) => v.label.trim() !== "" && v.price !== "")
-    .map((v)    => ({ label: v.label.trim(), price: parseFloat(v.price) })),
+    .map((v)    => ({ 
+      label: v.label.trim(), 
+      price: parseFloat(v.price),
+      inStock: v.inStock !== false // Default to true if not explicitly set
+    })),
   addons: form.addons
     .filter((a) => a.label.trim() !== "" && a.price !== "")
     .map((a)    => ({ label: a.label.trim(), price: parseFloat(a.price) })),
@@ -221,7 +261,7 @@ function timeAgo(ts) {
 
 // ─── Sub-Components ─────────────────────────────────────────────────────────────
 
-function PairRow({ item, index, total, onUpdate, onRemove }) {
+function PairRow({ item, index, total, onUpdate, onRemove, isVariant = false }) {
   return (
     <div className="flex gap-2 items-center">
       <input
@@ -241,6 +281,20 @@ function PairRow({ item, index, total, onUpdate, onRemove }) {
                      focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
         />
       </div>
+      {isVariant && (
+        <button
+          type="button"
+          onClick={() => onUpdate(index, "inStock", !(item.inStock !== false))}
+          className={`p-2 rounded-lg border transition-colors ${
+            item.inStock !== false 
+              ? "bg-green-50 border-green-200 text-green-600 hover:bg-green-100" 
+              : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
+          }`}
+          title={`Toggle variant stock (${item.inStock !== false ? 'In Stock' : 'Out of Stock'})`}
+        >
+          {item.inStock !== false ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
+        </button>
+      )}
       <button
         type="button" onClick={() => onRemove(index)} disabled={total === 1}
         className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50
@@ -252,16 +306,18 @@ function PairRow({ item, index, total, onUpdate, onRemove }) {
   );
 }
 
-function DynamicPairList({ items, onChange, addLabel }) {
+function DynamicPairList({ items, onChange, addLabel, isVariant = false }) {
   const handleUpdate = (i, field, val) =>
     onChange(items.map((it, idx) => (idx === i ? { ...it, [field]: val } : it)));
   const handleRemove = (i) => onChange(items.filter((_, idx) => idx !== i));
-  const handleAdd    = ()  => onChange([...items, { label: "", price: "" }]);
+  const handleAdd    = ()  => onChange([...items, isVariant 
+    ? { label: "", price: "", inStock: true } 
+    : { label: "", price: "" }]);
   return (
     <div className="space-y-2">
       {items.map((item, i) => (
         <PairRow key={i} item={item} index={i} total={items.length}
-          onUpdate={handleUpdate} onRemove={handleRemove} />
+          onUpdate={handleUpdate} onRemove={handleRemove} isVariant={isVariant} />
       ))}
       <button type="button" onClick={handleAdd}
         className="flex items-center gap-1.5 text-sm text-amber-600 hover:text-amber-700 font-medium mt-1">
@@ -280,12 +336,17 @@ function StatCard({ label, value, colorClasses }) {
   );
 }
 
-function MenuItemCard({ item, onEdit, onDelete, onToggleStock, onToggleSpecial, isDeleting, isToggling }) {
+function MenuItemCard({ item, onEdit, onDelete, onToggleVariantStock, onToggleSpecial, isDeleting, isToggling }) {
+  // Calculate overall item availability based on variants
+  const hasAvailableVariants = item.variants?.length > 0 
+    ? item.variants.some(v => v.inStock !== false)
+    : item.inStock;
+
   return (
     <motion.div layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.18 }}
       className={`bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm flex flex-col
-                  ${!item.inStock ? "opacity-60" : ""}`}
+                  ${!hasAvailableVariants ? "opacity-60" : ""}`}
     >
       <div className="relative h-44 bg-gray-100 overflow-hidden">
         {item.imageUrl
@@ -300,8 +361,8 @@ function MenuItemCard({ item, onEdit, onDelete, onToggleStock, onToggleSpecial, 
         </span>
         <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full text-white
-                           ${item.inStock ? "bg-green-500" : "bg-red-500"}`}>
-            {item.inStock ? "In Stock" : "Out of Stock"}
+                           ${hasAvailableVariants ? "bg-green-500" : "bg-red-500"}`}>
+            {hasAvailableVariants ? "Available" : "Out of Stock"}
           </span>
           {item.isMncSpecial && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white shadow flex items-center gap-1">
@@ -314,27 +375,53 @@ function MenuItemCard({ item, onEdit, onDelete, onToggleStock, onToggleSpecial, 
         <h3 className="font-semibold text-gray-900 text-base leading-tight">{item.name}</h3>
         {item.description &&
           <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.description}</p>}
+        
+        {/* Variant-Level Stock Management */}
         {item.variants?.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {item.variants.map((v, i) => (
-              <span key={i} className="bg-amber-50 border border-amber-200 text-amber-800
-                                       text-xs font-medium px-2 py-0.5 rounded-full">
-                {v.label} — ₹{v.price}
-              </span>
-            ))}
+          <div className="mt-3">
+            <p className="text-xs font-medium text-gray-600 mb-1.5">Variant Stock Control</p>
+            <div className="flex flex-wrap gap-1.5">
+              {item.variants.map((v, i) => {
+                const isInStock = v.inStock !== false; // Default to true if not set
+                return (
+                  <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2 border">
+                    <span className="text-xs font-medium text-gray-700 flex-1">
+                      {v.label} — ₹{v.price}
+                    </span>
+                    <button 
+                      type="button" 
+                      onClick={() => onToggleVariantStock(item.id, i, !isInStock)} 
+                      disabled={isToggling}
+                      className={`w-2 h-2 rounded-full transition-colors disabled:opacity-50 ${
+                        isInStock 
+                          ? "bg-green-500" 
+                          : "bg-red-500"
+                      }`}
+                      title={`Toggle ${v.label} stock (${isInStock ? 'In Stock' : 'Out of Stock'})`}
+                    >
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
+
         <div className="mt-auto pt-4 space-y-2">
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => onToggleStock(item)} disabled={isToggling}
-              className={`flex items-center gap-1 flex-1 justify-center py-2 rounded-xl text-xs
-                          font-semibold border transition-colors disabled:opacity-50
-                          ${item.inStock
-                            ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
-                            : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"}`}>
-              {item.inStock ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-              {item.inStock ? "In Stock" : "Out of Stock"}
-            </button>
+            {/* Overall Availability Indicator */}
+            <div className={`flex items-center gap-1 flex-1 justify-center py-2 rounded-xl text-xs
+                          font-semibold border ${
+                            hasAvailableVariants
+                              ? "border-green-200 bg-green-50 text-green-700"
+                              : "border-red-200 bg-red-50 text-red-600"
+                          }`}>
+              {hasAvailableVariants ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+              {item.variants?.length > 0 
+                ? `${item.variants.filter(v => v.inStock !== false).length}/${item.variants.length} Available`
+                : hasAvailableVariants ? "Available" : "Out of Stock"
+              }
+            </div>
             <button type="button" onClick={() => onToggleSpecial(item)} title="Toggle MNC Special feature"
               className={`p-2 rounded-xl border transition-colors ${item.isMncSpecial ? "bg-amber-500 text-white border-amber-500" : "bg-gray-50 text-gray-400 border-gray-200 hover:text-amber-500"}`}>
               <Sparkles size={15} />
@@ -493,10 +580,12 @@ function OrderCard({ order, onStatusChange, onItemStatusChange, isUpdating }) {
             </div>
             <span className="text-xs text-gray-600">{timeAgo(order.createdAt)}</span>
           </div>
-          <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1
-                            rounded-full border ${meta.color}`}>
-            {meta.icon}{order.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1
+                              rounded-full border ${meta.color}`}>
+              {meta.icon}{order.status}
+            </span>
+          </div>
         </div>
 
         {/* Kitchen Status Summary */}
@@ -772,13 +861,16 @@ export default function AdminMenu() {
           if (change.type === "added") {
             const newOrder = change.doc.data();
             if (newOrder.status === "Open") {
+              // Play single loud alert for new orders
+              resumeAudioCtx();
               playOrderChime();
             }
           }
-          // Fire a distinct double-chime when a customer adds items to an existing order
+          // Play distinct alert when a customer adds items to an existing order
           if (change.type === "modified") {
             const updatedOrder = change.doc.data();
             if (updatedOrder.hasModification) {
+              resumeAudioCtx();
               playModificationChime();
             }
           }
@@ -912,6 +1004,8 @@ export default function AdminMenu() {
     }
   };
 
+  // Legacy function kept for compatibility (now using variant-level stock)
+  // eslint-disable-next-line no-unused-vars
   const handleToggleStock = async (item) => {
     setTogglingId(item.id);
     try {
@@ -920,6 +1014,33 @@ export default function AdminMenu() {
       });
     } catch (err) { console.error(err); }
     finally { setTogglingId(null); }
+  };
+
+  // Variant-level stock toggle handler
+  const handleToggleVariantStock = async (itemId, variantIndex, newStockStatus) => {
+    setTogglingId(itemId);
+    try {
+      // Get current item to update specific variant
+      const itemDoc = await getDoc(doc(db, "menu_items", itemId));
+      if (itemDoc.exists()) {
+        const currentItem = itemDoc.data();
+        const updatedVariants = [...(currentItem.variants || [])];
+        
+        // Update specific variant's stock status
+        if (updatedVariants[variantIndex]) {
+          updatedVariants[variantIndex].inStock = newStockStatus;
+        }
+        
+        await updateDoc(doc(db, "menu_items", itemId), {
+          variants: updatedVariants,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) { 
+      console.error('Failed to update variant stock:', err); 
+    } finally { 
+      setTogglingId(null); 
+    }
   };
 
   // MNC Special toggle handler for admin menu cards
@@ -937,8 +1058,12 @@ export default function AdminMenu() {
       description: item.description || "", imageUrl: item.imageUrl || "",
       imageFile: null, // Always null when editing existing item
       variants: item.variants?.length
-        ? item.variants.map((v) => ({ label: v.label, price: String(v.price) }))
-        : [{ label: "", price: "" }],
+        ? item.variants.map((v) => ({ 
+            label: v.label, 
+            price: String(v.price),
+            inStock: v.inStock !== false // Default to true for existing variants without inStock
+          }))
+        : [{ label: "", price: "", inStock: true }],
       addons: item.addons?.length
         ? item.addons.map((a) => ({ label: a.label, price: String(a.price) }))
         : [{ label: "", price: "" }],
@@ -1305,7 +1430,7 @@ export default function AdminMenu() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Price Variants <span className="text-red-500">*</span>
                       </label>
-                      <DynamicPairList items={form.variants} onChange={(v) => setField("variants", v)} addLabel="Add Variant" />
+                      <DynamicPairList items={form.variants} onChange={(v) => setField("variants", v)} addLabel="Add Variant" isVariant={true} />
                       {errors.variants && <p className="text-red-500 text-xs mt-1">{errors.variants}</p>}
                     </div>
 
@@ -1396,7 +1521,7 @@ export default function AdminMenu() {
                 <AnimatePresence>
                   {filteredItems.map((item) => (
                     <MenuItemCard key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete}
-                      onToggleStock={handleToggleStock} onToggleSpecial={handleToggleSpecial}
+                      onToggleVariantStock={handleToggleVariantStock} onToggleSpecial={handleToggleSpecial}
                       isDeleting={deletingId === item.id} isToggling={togglingId === item.id} />
                   ))}
                 </AnimatePresence>
@@ -1425,14 +1550,22 @@ export default function AdminMenu() {
                   <Archive size={13} /> Completed History ({historyOrders.length})
                 </button>
               </div>
-              <button type="button" onClick={() => { resumeAudioCtx(); playOrderChime(); }} title="Test Notification Chime"
-                className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl hover:bg-amber-100">
-                <Volume2 size={13} /> Test Sound
-              </button>
-              <button type="button" onClick={() => { resumeAudioCtx(); playModificationChime(); }} title="Test Modification Chime"
-                className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-xl hover:bg-orange-100">
-                <Volume2 size={13} /> Test Mod Sound
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => { 
+                  resumeAudioCtx(); 
+                  playOrderChime(); 
+                }} title="Test New Order Sound - Single Play"
+                  className="flex items-center gap-1 text-xs text-blue-700 bg-blue-100 border border-blue-300 px-3 py-1.5 rounded-lg hover:bg-blue-200 font-medium">
+                  <Volume2 size={13} /> Test New Order Sound
+                </button>
+                <button type="button" onClick={() => { 
+                  resumeAudioCtx(); 
+                  playModificationChime(); 
+                }} title="Test Item Addition Sound - Single Play"
+                  className="flex items-center gap-1 text-xs text-orange-700 bg-orange-100 border border-orange-300 px-3 py-1.5 rounded-lg hover:bg-orange-200 font-medium">
+                  <Volume2 size={13} /> Test Addition Sound
+                </button>
+              </div>
             </div>
 
             {ordersLoading ? (
