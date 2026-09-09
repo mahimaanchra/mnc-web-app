@@ -33,44 +33,49 @@ import SessionManager from "../utils/sessionManager";
 
 const STATUS_CONFIG = {
   Open: {
-    label:  "Open Tab",
+    label:  "", // Remove "Open Tab" text
     icon:   <Clock         size={12} />,
-    pill:   "bg-blue-400/15 text-blue-300 border border-blue-500/35",
-    accent: "border-l-2 border-blue-500/50",
-    floatBg: "bg-[#1e1e1e] border border-blue-500/40",
-    floatText: "text-blue-300",
+    pill:   "bg-gradient-to-r from-amber-300/20 to-amber-400/20 text-amber-200 border border-amber-300/40",
+    accent: "border-l-4 border-amber-300",
+    floatBg: "bg-gradient-to-r from-amber-400 to-amber-500 border border-amber-300",
+    floatText: "text-black",
+    cardGlow: "ring-2 ring-amber-300/60 shadow-xl shadow-amber-300/25 bg-gradient-to-br from-amber-50/8 to-amber-100/12", // Enhanced glowing effect for active orders
   },
   Pending: {
-    label:  "Pending",
+    label:  "Preparing Order",
     icon:   <Clock         size={12} />,
-    pill:   "bg-yellow-400/15 text-yellow-300 border border-yellow-500/35",
-    accent: "border-l-2 border-yellow-500/50",
-    floatBg: "bg-[#1e1e1e] border border-yellow-500/40",
-    floatText: "text-yellow-300",
+    pill:   "bg-gradient-to-r from-orange-500/20 to-amber-500/20 text-amber-200 border border-amber-400/40",
+    accent: "border-l-4 border-amber-400",
+    floatBg: "bg-gradient-to-r from-orange-500 to-amber-500 border border-amber-400",
+    floatText: "text-white",
+    cardGlow: "", // No glow for non-open orders
   },
   Preparing: {
-    label:  "Preparing",
+    label:  "Cooking Now",
     icon:   <ChefHat       size={12} />,
-    pill:   "bg-blue-400/15 text-blue-300 border border-blue-500/35",
-    accent: "border-l-2 border-blue-500/50",
-    floatBg: "bg-[#1e1e1e] border border-blue-500/40",
-    floatText: "text-blue-300",
+    pill:   "bg-gradient-to-r from-purple-500/20 to-indigo-500/20 text-indigo-200 border border-indigo-400/40",
+    accent: "border-l-4 border-indigo-400",
+    floatBg: "bg-gradient-to-r from-purple-500 to-indigo-500 border border-indigo-400",
+    floatText: "text-white",
+    cardGlow: "", // No glow for non-open orders
   },
   Ready: {
-    label:  "Ready! 🎉",
+    label:  "Ready for Pickup! 🎉",
     icon:   <CheckCircle2  size={12} />,
-    pill:   "bg-amber-400/20 text-amber-200 border border-amber-400/50",
-    accent: "border-l-2 border-amber-400",
-    floatBg: "bg-amber-400 border border-amber-300",
-    floatText: "text-[#1a1a1a]",
+    pill:   "bg-gradient-to-r from-emerald-500/25 to-green-400/25 text-emerald-100 border border-emerald-400/60",
+    accent: "border-l-4 border-emerald-400",
+    floatBg: "bg-gradient-to-r from-emerald-500 to-green-400 border border-emerald-300",
+    floatText: "text-white",
+    cardGlow: "", // No glow for non-open orders
   },
   Completed: {
-    label:  "Served ✓",
+    label:  "Order Completed ✓",
     icon:   <CircleDollarSign size={12} />,
-    pill:   "bg-green-500/15 text-green-300 border border-green-500/30",
-    accent: "border-l-2 border-green-500/40",
-    floatBg: "bg-[#1e1e1e] border border-green-500/30",
-    floatText: "text-green-300",
+    pill:   "bg-gradient-to-r from-slate-600/25 to-gray-600/25 text-slate-300 border border-slate-400/40",
+    accent: "border-l-4 border-slate-400",
+    floatBg: "bg-gradient-to-r from-slate-600 to-gray-600 border border-slate-400",
+    floatText: "text-white",
+    cardGlow: "", // No glow for non-open orders
   },
 };
 
@@ -78,6 +83,10 @@ const STATUS_CONFIG = {
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.Pending;
+  
+  // Don't render badge if label is empty (like for Open status)
+  if (!cfg.label) return null;
+  
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
                       text-[11px] font-bold tracking-wide ${cfg.pill}`}>
@@ -103,8 +112,13 @@ function TrackerOrderCard({ order, onAddMore, dimmed = false }) {
   );
 
   return (
-    <div className={`rounded-2xl overflow-hidden ${cfg.accent} bg-[#242424] border border-[#2e2e2e]
-                     transition-opacity ${dimmed ? "opacity-55" : ""}`}>
+    <div className={`rounded-2xl overflow-hidden ${cfg.accent} 
+                     ${order.status === "Open" 
+                       ? "bg-gradient-to-br from-[#2a2a2a] via-[#1f1f1f] to-[#1a1a1a] border-2 border-amber-300/30" 
+                       : "bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f] border border-[#2e2e2e]/50"}
+                     transition-all duration-300 ${dimmed ? "opacity-60" : ""} 
+                     ${order.status === "Open" ? cfg.cardGlow : ""}
+                     shadow-lg ${order.status === "Open" ? "shadow-amber-300/10" : "shadow-black/20"}`}>
 
       {/* Header */}
       <div className="px-4 pt-3.5 pb-3 flex items-start justify-between gap-3">
@@ -133,8 +147,8 @@ function TrackerOrderCard({ order, onAddMore, dimmed = false }) {
 
       {/* "Open" status info - show if items have different statuses */}
       {order.status === "Open" && order.items && (
-        <div className="mx-4 mb-3 px-3 py-2 rounded-xl bg-blue-400/10 border border-blue-400/30">
-          <p className="text-blue-300 text-xs font-bold text-center">📋 Tab is open - you can add more items!</p>
+        <div className="mx-4 mb-3 px-4 py-3 rounded-xl bg-amber-300/10 border border-amber-300/30 backdrop-blur-sm">
+          <p className="text-amber-300 text-xs font-bold text-center">📋 Tab is open - you can add more items!</p>
         </div>
       )}
 
@@ -142,14 +156,14 @@ function TrackerOrderCard({ order, onAddMore, dimmed = false }) {
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5
-                   border-t border-[#2e2e2e] text-[#9a9a9a] text-xs
-                   hover:text-white transition-colors min-h-[40px]"
+        className="w-full flex items-center justify-between px-4 py-3
+                   border-t border-[#2e2e2e]/30 text-[#9a9a9a] text-xs
+                   hover:text-white hover:bg-[#2a2a2a]/30 transition-all min-h-[44px]"
       >
         <span className="font-medium">
           {order.items?.length ?? 0} item{(order.items?.length ?? 0) !== 1 ? "s" : ""}
           {hasAddons && (
-            <span className="ml-1.5 text-[#f5a623]">
+            <span className="ml-1.5 text-amber-300 font-semibold">
               +{modifications.length} add-on{modifications.length > 1 ? "s" : ""}
             </span>
           )}
@@ -376,37 +390,39 @@ export default function OrderTracker({
               exit={{ y: "100%", opacity: 0.8 }}
               transition={{ type: "spring", damping: 30, stiffness: 320 }}
               className="fixed inset-x-0 bottom-0 z-50 flex flex-col
-                         bg-[#1e1e1e] border-t border-[#2e2e2e] rounded-t-3xl
-                         max-h-[85vh] overflow-hidden"
+                         bg-gradient-to-b from-[#0f0f0f] to-[#1a1a1a] border-t-2 border-amber-300/20 rounded-t-3xl
+                         max-h-[85vh] overflow-hidden shadow-2xl shadow-black/50"
             >
               {/* Handle */}
               <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-                <div className="w-10 h-1 rounded-full bg-[#3a3a3a]" />
+                <div className="w-12 h-1.5 rounded-full bg-amber-300/40" />
               </div>
 
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-3
-                              border-b border-[#2e2e2e] flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <ClipboardList size={17} className="text-[#f5a623]" />
+              <div className="flex items-center justify-between px-5 py-4
+                              border-b border-amber-300/10 bg-gradient-to-r from-[#1a1a1a] to-[#242424] flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-300/10 border border-amber-300/20 flex items-center justify-center">
+                    <ClipboardList size={20} className="text-amber-300" />
+                  </div>
                   <div>
-                    <h2 className="text-white font-bold text-base">My Orders</h2>
-                    <p className="text-[#9a9a9a] text-xs">Last 7 orders</p>
+                    <h2 className="text-white font-bold text-lg">My Orders</h2>
+                    <p className="text-amber-300/60 text-xs">Recent order history</p>
                   </div>
                   {activeOrder && <StatusBadge status={activeOrder.status} />}
                 </div>
                 <button
                   type="button"
                   onClick={() => onOpenChange(false)}
-                  className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white
-                             hover:bg-[#2e2e2e] transition-colors"
+                  className="p-2 rounded-xl text-[#9a9a9a] hover:text-white
+                             hover:bg-amber-300/10 border border-transparent hover:border-amber-300/20 transition-all"
                 >
-                  <X size={18} />
+                  <X size={20} />
                 </button>
               </div>
 
-              {/* Body — up to 5 orders */}
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+              {/* Body — up to 7 orders */}
+              <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4 bg-gradient-to-b from-transparent to-[#0f0f0f]/50">
                 {displayOrders.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-14 text-center">
                     <PackageX size={36} className="text-[#3a3a3a] mb-3" />
@@ -424,25 +440,34 @@ export default function OrderTracker({
                       <div key={order.id}>
                         {/* Section label only before the first active / first completed */}
                         {idx === 0 && isActive && (
-                          <p className="text-[10px] font-bold text-[#f5a623] uppercase
-                                        tracking-widest mb-2">
-                            Current Order
-                          </p>
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
+                            <p className="text-xs font-bold text-amber-300 uppercase tracking-widest">
+                              Active Order
+                            </p>
+                            <div className="flex-1 h-px bg-amber-300/20" />
+                          </div>
                         )}
                         {idx > 0 && !isActive &&
                           (displayOrders[idx - 1]?.status === "Pending"
                             || displayOrders[idx - 1]?.status === "Preparing"
                             || displayOrders[idx - 1]?.status === "Ready") && (
-                          <p className="text-[10px] font-bold text-[#9a9a9a] uppercase
-                                        tracking-widest mt-4 mb-2">
-                            Previous Orders
-                          </p>
+                          <div className="flex items-center gap-3 mt-6 mb-3">
+                            <div className="w-2 h-2 rounded-full bg-[#555]" />
+                            <p className="text-xs font-bold text-[#888] uppercase tracking-widest">
+                              Order History
+                            </p>
+                            <div className="flex-1 h-px bg-[#333]" />
+                          </div>
                         )}
                         {idx === 0 && !isActive && (
-                          <p className="text-[10px] font-bold text-[#9a9a9a] uppercase
-                                        tracking-widest mb-2">
-                            Recent Orders
-                          </p>
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-2 h-2 rounded-full bg-[#555]" />
+                            <p className="text-xs font-bold text-[#888] uppercase tracking-widest">
+                              Recent Orders
+                            </p>
+                            <div className="flex-1 h-px bg-[#333]" />
+                          </div>
                         )}
                         <TrackerOrderCard
                           order={order}

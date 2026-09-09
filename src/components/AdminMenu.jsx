@@ -392,7 +392,7 @@ function MenuItemCard({ item, onEdit, onDelete, onToggleVariantStock, onToggleSp
                       type="button" 
                       onClick={() => onToggleVariantStock(item.id, i, !isInStock)} 
                       disabled={isToggling}
-                      className={`w-2 h-2 rounded-full transition-colors disabled:opacity-50 ${
+                      className={`w-1.5 h-1.5 rounded-full transition-colors disabled:opacity-50 ${
                         isInStock 
                           ? "bg-green-500" 
                           : "bg-red-500"
@@ -451,33 +451,50 @@ function ItemStatusRow({ item, onStatusChange, isUpdating }) {
   const statusMeta = STATUS_META[item.status || "Pending"];
 
   return (
-    <div className="flex items-center justify-between py-2 px-3 bg-white rounded-lg border border-gray-100">
-      <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium text-gray-900">
-          {item.qty}× {item.itemName}
-        </span>
-        {item.variantLabel && (
-          <span className="text-xs text-gray-500 ml-1">({item.variantLabel})</span>
-        )}
-        <div className="flex items-center gap-2 mt-1">
-          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusMeta.color}`}>
-            {statusMeta.icon} {item.status || "Pending"}
-          </span>
-          <span className="text-xs text-gray-500">₹{item.price * item.qty}</span>
+    <div className="py-2 px-3 bg-white rounded-lg border border-gray-100">
+      <div className="flex items-center justify-between">
+        <div className="flex-1 min-w-0">
+          <div>
+            <span className="text-sm font-medium text-gray-900">
+              {item.qty}× {item.itemName}
+            </span>
+            {item.variantLabel && (
+              <span className="text-xs text-gray-500 ml-1">({item.variantLabel})</span>
+            )}
+          </div>
+          
+          {/* COMPACT ADD-ONS SUB-TEXT */}
+          {item.addons?.length > 0 && (
+            <div className="mt-1">
+              <span className="text-orange-600 font-bold text-sm">
+                + {item.addons.map(addon => addon.label).join(' & ').toUpperCase()}
+              </span>
+              <span className="text-orange-500 text-xs ml-2">
+                (+₹{item.addons.reduce((sum, addon) => sum + addon.price, 0)})
+              </span>
+            </div>
+          )}
+          
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusMeta.color}`}>
+              {statusMeta.icon} {item.status || "Pending"}
+            </span>
+            <span className="text-xs text-gray-500">₹{item.price * item.qty}</span>
+          </div>
         </div>
+        {nextStatus && (
+          <button
+            type="button"
+            onClick={() => onStatusChange(nextStatus)}
+            disabled={isUpdating}
+            className="flex items-center gap-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-60
+                       text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            {isUpdating ? <Loader2 size={10} className="animate-spin" /> : <ChevronRight size={10} />}
+            {nextStatus}
+          </button>
+        )}
       </div>
-      {nextStatus && (
-        <button
-          type="button"
-          onClick={() => onStatusChange(nextStatus)}
-          disabled={isUpdating}
-          className="flex items-center gap-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-60
-                     text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-        >
-          {isUpdating ? <Loader2 size={10} className="animate-spin" /> : <ChevronRight size={10} />}
-          {nextStatus}
-        </button>
-      )}
     </div>
   );
 }
@@ -530,34 +547,44 @@ function OrderCard({ order, onStatusChange, onItemStatusChange, isUpdating }) {
                     ? "bg-gray-50/70 border-gray-200 opacity-80"
                     : "bg-white border-gray-200"}`}
     >
-      {/* ── Pulsing modification alert banner — calm amber, not alarming ── */}
+      {/* ── Professional Modification Alert Banner ── */}
       {hasModification && order.status !== "Completed" && (
-        <div className="flex items-start gap-2.5 px-4 py-2.5
-                        bg-amber-500/10 border-b border-amber-500/30">
-          <span className="text-base leading-none flex-shrink-0 mt-0.5">✚</span>
+        <div className="flex items-center gap-3 px-4 py-3
+                        bg-gradient-to-r from-amber-50 to-orange-50 
+                        border-l-4 border-amber-500 border-b border-amber-200">
+          <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+            <span className="text-white font-bold text-sm">+</span>
+          </div>
           <div className="min-w-0 flex-1">
-            <p className="text-amber-700 text-xs font-bold leading-tight">
-              Items Added by Customer
+            <p className="text-amber-800 text-sm font-bold leading-tight">
+              Customer Added Items
             </p>
-            <p className="text-amber-600 text-xs mt-0.5 leading-snug">
+            <p className="text-amber-700 text-xs mt-0.5 leading-snug">
               {lastModItems.map((it, i) => (
                 <span key={i}>
-                  {i > 0 && ", "}
-                  <strong>{it.itemName}</strong> ×{it.qty}
+                  {i > 0 && " • "}
+                  <strong className="text-amber-900">{it.itemName}</strong> ×{it.qty}
+                  {it.addons?.length > 0 && (
+                    <span className="text-orange-600 ml-1">
+                      (+{it.addons.length} extra{it.addons.length > 1 ? 's' : ''})
+                    </span>
+                  )}
                 </span>
               ))}
               {modifications.length > 1 && (
-                <span className="text-amber-400 ml-1">
+                <span className="text-amber-600 ml-2 font-medium">
                   +{modifications.length - 1} more batch{modifications.length > 2 ? "es" : ""}
                 </span>
               )}
             </p>
           </div>
-          <span className="flex-shrink-0 text-[10px] font-bold text-amber-700
-                           bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full
-                           whitespace-nowrap self-start">
-            New Add-on
-          </span>
+          <div className="flex flex-col gap-1">
+            <span className="flex-shrink-0 text-xs font-bold text-amber-800
+                             bg-amber-200 border border-amber-400 px-3 py-1 rounded-full
+                             whitespace-nowrap">
+              New Items
+            </span>
+          </div>
         </div>
       )}
 
@@ -667,87 +694,143 @@ function OrderCard({ order, onStatusChange, onItemStatusChange, isUpdating }) {
           </div>
         )}
 
-        {/* ── Collapsed item summary ── */}
+        {/* ── Professional Order Layout — Ticket Style ── */}
         {!expandedItems && (
-          <>
-            {/* Original items */}
-            <ul className="space-y-1.5 mb-3">
-              {order.items?.map((it, i) => (
-                <li key={i} className="flex justify-between text-sm gap-2">
-                  <span className="text-gray-700 flex items-center gap-1.5 flex-wrap">
-                    {it.qty}× {it.itemName}
-                    {it.variantLabel && (
-                      <span className="text-gray-500">({it.variantLabel})</span>
-                    )}
-                    {it.isFreeStreak && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-black
-                                       bg-amber-400 text-amber-950 px-2 py-0.5 rounded-md
-                                       leading-tight whitespace-nowrap">
-                        🎁 FREE — STREAK #7
-                      </span>
-                    )}
-                    {order.status === "Open" && it.status && (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${STATUS_META[it.status]?.color || STATUS_META.Pending.color}`}>
-                        {it.status}
-                      </span>
-                    )}
-                  </span>
-                  <span className={`font-medium flex-shrink-0
-                                    ${it.isFreeStreak ? "text-green-600" : "text-gray-600"}`}>
-                    {it.isFreeStreak ? "FREE" : `₹${it.price * it.qty}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
+          <div className="space-y-4">
+            {/* ORIGINAL ORDER ITEMS */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Original Order</span>
+                <div className="flex-1 h-px bg-gray-200"></div>
+              </div>
+              
+              <div className="space-y-3">
+                {order.items?.map((it, i) => (
+                  <div key={i} className="bg-gray-50 rounded-lg p-4 border-l-4 border-gray-300">
+                    {/* Main item info */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="bg-gray-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                            {it.qty}×
+                          </span>
+                          <span className="text-gray-900 font-semibold text-base">
+                            {it.itemName}
+                          </span>
+                          {it.variantLabel && (
+                            <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full border">
+                              {it.variantLabel}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* COMPACT ADD-ONS SUB-TEXT */}
+                        {it.addons?.length > 0 && (
+                          <div className="mt-1 ml-6">
+                            <span className="text-orange-600 font-bold text-xs">
+                              + {it.addons.map(addon => addon.label).join(' & ').toUpperCase()}
+                            </span>
+                            <span className="text-orange-500 text-xs ml-2">
+                              (+₹{it.addons.reduce((sum, addon) => sum + addon.price, 0)})
+                            </span>
+                          </div>
+                        )}
+                        
+                     
+                      </div>
+                      
+                      <div className="text-right">
+                        <span className={`text-lg font-bold ${it.isFreeStreak ? "text-green-600" : "text-gray-700"}`}>
+                          {it.isFreeStreak ? "FREE" : `₹${it.price * it.qty}`}
+                        </span>
+                        {it.isFreeStreak && (
+                          <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full mt-1">
+                            🎁 STREAK REWARD
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-            {/* ── Add-on batches — flat dark blocks, clearly separated ── */}
+            {/* CUSTOMER ADDED ITEMS */}
             {modifications.map((mod, mi) => (
-              <div key={mi} className="mb-3 rounded-xl bg-[#1a1a1a] overflow-hidden">
-                {/* Batch header row */}
-                <div className="flex items-center justify-between px-3 py-2 border-b border-[#f5a623]/20">
-                  <span className="text-[10px] font-black text-[#f5a623] uppercase tracking-wider">
-                    ✚ Customer Added
-                    {mod.addedAt
-                      ? ` · ${mod.addedAt.toDate
-                          ? mod.addedAt.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                          : new Date(mod.addedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                      : ""}
+              <div key={mi}>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">
+                    Customer Added - Batch {mi + 1}
                   </span>
-                  <span className="text-[10px] font-bold text-[#f5a623]">
-                    +₹{mod.addedPrice ?? (mod.items ?? []).reduce((s, it) => s + it.price * it.qty, 0)}
+                  <div className="flex-1 h-px bg-amber-200"></div>
+                  <span className="text-xs text-amber-600 font-medium">
+                    {mod.addedAt ? (mod.addedAt.toDate ? mod.addedAt.toDate() : new Date(mod.addedAt)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ''}
                   </span>
                 </div>
-                {/* Batch items */}
-                <ul className="px-3 py-2 space-y-1">
+                
+                <div className="space-y-3">
                   {(mod.items ?? []).map((it, i) => (
-                    <li key={i} className="flex justify-between text-sm gap-2">
-                      <span className="text-amber-200 font-semibold flex items-center gap-1.5">
-                        {it.qty}× {it.itemName}
-                        {it.variantLabel && (
-                          <span className="font-normal text-amber-400/70 ml-1">
-                            ({it.variantLabel})
-                          </span>
-                        )}
-                        {order.status === "Open" && it.status && (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${STATUS_META[it.status]?.color || STATUS_META.Pending.color}`}>
-                            {it.status}
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-[#f5a623] font-bold flex-shrink-0">
-                        ₹{it.price * it.qty}
-                      </span>
-                    </li>
+                    <div key={i} className="bg-amber-50 rounded-lg p-4 border-l-4 border-amber-500">
+                      {/* Main item info */}
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                              {it.qty}×
+                            </span>
+                            <span className="text-amber-900 font-semibold text-base">
+                              {it.itemName}
+                            </span>
+                            {it.variantLabel && (
+                              <span className="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full border border-amber-300">
+                                {it.variantLabel}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* COMPACT ADD-ONS SUB-TEXT FOR CUSTOMER ADDED ITEMS */}
+                          {it.addons?.length > 0 && (
+                            <div className="mt-1 ml-6">
+                              <span className="text-red-600 font-bold text-sm">
+                                + {it.addons.map(addon => addon.label).join(' & ').toUpperCase()}
+                              </span>
+                              <span className="text-red-500 text-xs ml-2">
+                                (+₹{it.addons.reduce((sum, addon) => sum + addon.price, 0)})
+                              </span>
+                            </div>
+                          )}
+                          
+                          {/* Status indicator for Open orders */}
+                          {order.status === "Open" && it.status && (
+                            <div className="mt-2">
+                              <span className={`text-xs px-2 py-1 rounded-full border font-medium ${STATUS_META[it.status]?.color || STATUS_META.Pending.color}`}>
+                                {STATUS_META[it.status]?.icon} {it.status}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <span className="text-amber-800 text-lg font-bold">
+                          ₹{it.price * it.qty}
+                        </span>
+                      </div>
+                    </div>
                   ))}
-                  {mod.note && (
-                    <li className="text-xs text-amber-400/50 italic mt-1">
-                      Note: "{mod.note}"
-                    </li>
-                  )}
-                </ul>
+                </div>
+                
+                {/* Batch note */}
+                {mod.note && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-blue-800 text-sm italic">
+                      <span className="font-semibold">Note:</span> "{mod.note}"
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
-          </>
+          </div>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-100">

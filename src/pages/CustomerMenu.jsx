@@ -123,7 +123,7 @@ function AddOrNewModal({ activeOrder, cart, onAddToCurrent, onNewOrder, onClose 
                         shadow-2xl pointer-events-auto overflow-hidden">
 
           {/* Top amber strip */}
-          <div className="h-1 w-full bg-gradient-to-r from-[#f5a623] via-amber-300 to-[#f5a623]" />
+          <div className="h-1 w-full bg-gradient-to-r from-amber-300 via-amber-400 to-amber-300" />
 
           <div className="px-5 pt-5 pb-6 space-y-4">
             {/* Heading */}
@@ -150,11 +150,11 @@ function AddOrNewModal({ activeOrder, cart, onAddToCurrent, onNewOrder, onClose 
             {/* Cart summary pill */}
             <div className="flex items-center gap-2.5 bg-[#242424] border border-[#2e2e2e]
                             rounded-xl px-3.5 py-2.5">
-              <ShoppingBag size={15} className="text-[#f5a623] flex-shrink-0" />
+              <ShoppingBag size={15} className="text-amber-300 flex-shrink-0" />
               <p className="text-white text-xs flex-1 min-w-0">
                 <span className="font-bold">{itemCount} item{itemCount !== 1 ? "s" : ""}</span>
                 <span className="text-[#9a9a9a]"> in your cart</span>
-                <span className="text-[#f5a623] font-bold ml-1.5">₹{cartTotal}</span>
+                <span className="text-amber-300 font-bold ml-1.5">₹{cartTotal}</span>
               </p>
             </div>
 
@@ -168,10 +168,10 @@ function AddOrNewModal({ activeOrder, cart, onAddToCurrent, onNewOrder, onClose 
               onClick={handleAddToCurrent}
               disabled={loading}
               className="w-full flex items-center justify-center gap-2
-                         bg-[#f5a623] hover:bg-[#e08a00]
+                         bg-amber-300 hover:bg-amber-400
                          disabled:opacity-50 disabled:cursor-not-allowed
-                         text-[#1a1a1a] font-bold py-3.5 rounded-2xl text-sm
-                         transition-colors shadow-lg shadow-[#f5a623]/20 active:scale-[0.98]"
+                         text-black font-bold py-3.5 rounded-2xl text-sm
+                         transition-colors shadow-lg shadow-amber-300/20 active:scale-[0.98]"
             >
               {loading
                 ? <><Loader2 size={15} className="animate-spin" /> Adding to order…</>
@@ -183,7 +183,7 @@ function AddOrNewModal({ activeOrder, cart, onAddToCurrent, onNewOrder, onClose 
               onClick={onNewOrder}
               disabled={loading}
               className="w-full flex items-center justify-center gap-2
-                         border border-[#3a3a3a] hover:border-[#f5a623]/40
+                         border border-[#3a3a3a] hover:border-amber-300/40
                          text-[#9a9a9a] hover:text-white
                          disabled:opacity-50 font-semibold py-3 rounded-2xl text-sm
                          transition-colors active:scale-[0.98]"
@@ -251,9 +251,9 @@ function PhoneGateModal({ onVerified }) {
         <div className="px-6 pt-7 pb-8 space-y-5">
           {/* Icon + heading */}
           <div className="flex flex-col items-center text-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-[#f5a623]/15 border border-[#f5a623]/30
+            <div className="w-14 h-14 rounded-2xl bg-amber-300/15 border border-amber-300/30
                             flex items-center justify-center">
-              <Phone size={26} className="text-[#f5a623]" />
+              <Phone size={26} className="text-amber-300" />
             </div>
             <div>
               <h2 className="text-white font-bold text-xl leading-tight">
@@ -262,7 +262,7 @@ function PhoneGateModal({ onVerified }) {
               <p className="text-[#9a9a9a] text-sm mt-1.5 leading-relaxed">
                 Enter your mobile number to track orders,
                 earn loyalty rewards, and get your{" "}
-                <span className="text-[#f5a623] font-semibold">FREE Burger 🍔</span>{" "}
+                <span className="text-amber-300 font-semibold">FREE Burger 🍔</span>{" "}
                 on every 7th order.
               </p>
             </div>
@@ -290,7 +290,7 @@ function PhoneGateModal({ onVerified }) {
                 autoFocus
                 className="w-full bg-[#1a1a1a] border border-[#3a3a3a] text-white text-base
                            placeholder-[#555] rounded-2xl pl-10 pr-4 py-3
-                           focus:outline-none focus:border-[#f5a623] transition-colors"
+                           focus:outline-none focus:border-amber-300 transition-colors"
               />
             </div>
             {error && (
@@ -302,13 +302,13 @@ function PhoneGateModal({ onVerified }) {
           </div>
 
           {/* Loyalty nudge */}
-          <div className="flex items-start gap-3 bg-[#f5a623]/8 border border-[#f5a623]/20
+          <div className="flex items-start gap-3 bg-amber-300/8 border border-amber-300/20
                           rounded-2xl px-4 py-3">
-            <Gift size={16} className="text-[#f5a623] mt-0.5 flex-shrink-0" />
-            <p className="text-[#f5a623]/80 text-xs leading-relaxed">
+            <Gift size={16} className="text-amber-300 mt-0.5 flex-shrink-0" />
+            <p className="text-amber-300/80 text-xs leading-relaxed">
               Your streak is tied to this number. Order {STREAK_TARGET} times
               and your next order includes a{" "}
-              <strong className="text-[#f5a623]">free MNC Special Burger</strong>!
+              <strong className="text-amber-300">free MNC Special Burger</strong>!
             </p>
           </div>
 
@@ -318,10 +318,10 @@ function PhoneGateModal({ onVerified }) {
             onClick={handleSubmit}
             disabled={loading || phone.replace(/[^0-9]/g, "").length < 10}
             className="w-full flex items-center justify-center gap-2
-                       bg-[#f5a623] hover:bg-[#e08a00]
+                       bg-amber-300 hover:bg-amber-400
                        disabled:opacity-40 disabled:cursor-not-allowed
-                       text-[#1a1a1a] font-bold py-3.5 rounded-2xl text-sm
-                       transition-colors shadow-lg shadow-[#f5a623]/25
+                       text-black font-bold py-3.5 rounded-2xl text-sm
+                       transition-colors shadow-lg shadow-amber-300/25
                        active:scale-[0.98] min-h-[52px]"
           >
             {loading
@@ -444,7 +444,7 @@ function ItemCard({ item, onAddToCart }) {
       exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
       className={`bg-[#242424] border rounded-2xl overflow-hidden flex flex-col transition-all duration-300
                   ${hasAvailableVariants 
-                    ? "border-[#2e2e2e] hover:border-[#f5a623]/30 cursor-pointer" 
+                    ? "border-[#2e2e2e] hover:border-amber-300/30 cursor-pointer" 
                     : "border-[#2e2e2e] opacity-50 cursor-not-allowed grayscale pointer-events-none"}`}
     >
       <div className="relative h-44 bg-[#1e1e1e] overflow-hidden flex-shrink-0">
@@ -455,8 +455,8 @@ function ItemCard({ item, onAddToCart }) {
           : <div className={`absolute inset-0 flex items-center justify-center ${!hasAvailableVariants ? 'opacity-50' : ''}`}>
               <UtensilsCrossed size={36} className="text-[#3a3a3a]" /></div>
         }
-        <span className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-[#f5a623]
-                         text-xs font-semibold px-2.5 py-1 rounded-full border border-[#f5a623]/20">
+        <span className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-amber-300
+                         text-xs font-semibold px-2.5 py-1 rounded-full border border-amber-300/20">
          {item.category}
         </span>
         {!hasAvailableVariants && (
@@ -496,8 +496,8 @@ function ItemCard({ item, onAddToCart }) {
                                 ${!isVariantInStock 
                                   ? "bg-[#1a1a1a]/50 text-[#9a9a9a]/40 border-[#3a3a3a]/50 cursor-not-allowed" 
                                   : selectedVariant?.label === v.label
-                                    ? "bg-[#f5a623] text-[#1a1a1a] border-[#f5a623]"
-                                    : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#f5a623]/50"}`}>
+                                    ? "bg-amber-300 text-black border-amber-300"
+                                    : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-amber-300/50"}`}>
                     {v.label}<span className="ml-1 opacity-75">₹{v.price}</span>
                     {!isVariantInStock && <span className="ml-1 text-red-400 text-[10px]">(Out)</span>}
                   </button>
@@ -520,8 +520,8 @@ function ItemCard({ item, onAddToCart }) {
                                 ${!hasAvailableVariants 
                                   ? "bg-[#1a1a1a]/50 text-[#9a9a9a]/40 border-[#3a3a3a]/50 cursor-not-allowed"
                                   : active
-                                    ? "bg-[#f5a623]/20 text-[#f5a623] border-[#f5a623]/50"
-                                    : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#f5a623]/30"}`}>
+                                    ? "bg-amber-300/20 text-amber-300 border-amber-300/50"
+                                    : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-amber-300/30"}`}>
                     +{a.label}<span className="ml-1 opacity-75">₹{a.price}</span>
                   </button>
                 );
@@ -532,7 +532,7 @@ function ItemCard({ item, onAddToCart }) {
 
         <div className="mt-auto pt-4 flex items-center justify-between">
           <div>
-            <span className={`font-bold text-lg ${hasAvailableVariants ? 'text-[#f5a623]' : 'text-[#f5a623]/40'}`}>
+            <span className={`font-bold text-lg ${hasAvailableVariants ? 'text-amber-300' : 'text-amber-300/40'}`}>
               ₹{linePrice}
             </span>
             {addonTotal > 0 && (
@@ -555,8 +555,8 @@ function ItemCard({ item, onAddToCart }) {
                        ${!hasAvailableVariants || (selectedVariant && selectedVariant.inStock === false) 
                          ? "bg-gray-600 text-gray-400 cursor-not-allowed opacity-30"
                          : !selectedVariant
-                           ? "bg-[#f5a623]/40 text-[#1a1a1a]/60 cursor-not-allowed"
-                           : "bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a] shadow-[#f5a623]/20"}`}>
+                           ? "bg-amber-300/40 text-black/60 cursor-not-allowed"
+                           : "bg-amber-300 hover:bg-amber-400 text-black shadow-amber-300/20"}`}>
             <Plus size={15} />
             {!hasAvailableVariants || (selectedVariant && selectedVariant.inStock === false) ? "Unavailable" : "Add"}
           </button>
@@ -797,8 +797,8 @@ function CheckoutModal({
                   type="button"
                   onClick={() => handleModeSelect("dine-in")}
                   className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2
-                             border-[#3a3a3a] hover:border-[#f5a623] bg-[#242424]
-                             hover:bg-[#f5a623]/10 transition-all active:scale-95"
+                             border-[#3a3a3a] hover:border-amber-300 bg-[#242424]
+                             hover:bg-amber-300/10 transition-all active:scale-95"
                 >
                   <span className="text-3xl">🪑</span>
                   <div className="text-center">
@@ -811,8 +811,8 @@ function CheckoutModal({
                   type="button"
                   onClick={() => handleModeSelect("takeaway")}
                   className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2
-                             border-[#3a3a3a] hover:border-[#f5a623] bg-[#242424]
-                             hover:bg-[#f5a623]/10 transition-all active:scale-95"
+                             border-[#3a3a3a] hover:border-amber-300 bg-[#242424]
+                             hover:bg-amber-300/10 transition-all active:scale-95"
                 >
                   <span className="text-3xl">🛍️</span>
                   <div className="text-center">
@@ -834,7 +834,7 @@ function CheckoutModal({
                   <ArrowLeft size={16} />
                 </button>
                 <h2 className="text-white font-bold flex items-center gap-2 flex-1">
-                  <TableProperties size={16} className="text-[#f5a623]" /> Choose Your Table
+                  <TableProperties size={16} className="text-amber-300" /> Choose Your Table
                 </h2>
                 <button onClick={onClose}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
@@ -844,7 +844,7 @@ function CheckoutModal({
 
               <div className="px-5 py-6 space-y-4">
                 <div className="text-center mb-4">
-                  <p className="text-[#f5a623] text-sm font-semibold">🪑 Dine-In Selected</p>
+                  <p className="text-amber-300 text-sm font-semibold">🪑 Dine-In Selected</p>
                   <p className="text-[#9a9a9a] text-xs mt-1">Please enter your table number to complete your order</p>
                 </div>
                 
@@ -873,15 +873,15 @@ function CheckoutModal({
                                      flex items-center justify-center text-sm font-bold
                                      relative overflow-hidden
                                      ${isSelected 
-                                       ? 'bg-[#f5a623] border-[#f5a623] text-[#1a1a1a] shadow-lg shadow-[#f5a623]/30' 
-                                       : 'bg-[#2a2a2a] border-[#3a3a3a] text-[#9a9a9a] hover:border-[#f5a623]/50 hover:text-white'
+                                       ? 'bg-amber-300 border-amber-300 text-black shadow-lg shadow-amber-300/30' 
+                                       : 'bg-[#2a2a2a] border-[#3a3a3a] text-[#9a9a9a] hover:border-amber-300/50 hover:text-white'
                                      }`}
                         >
                           {isSelected && (
                             <motion.div
                               initial={{ scale: 0 }}
                               animate={{ scale: 1 }}
-                              className="absolute inset-0 bg-[#f5a623]/20 rounded-xl"
+                              className="absolute inset-0 bg-amber-300/20 rounded-xl"
                             />
                           )}
                           <span className="relative z-10">{tableNum}</span>
@@ -919,7 +919,7 @@ function CheckoutModal({
                       placeholder="Enter table number"
                       className="w-full bg-[#1a1a1a] border border-[#3a3a3a] text-white
                                  placeholder-[#555] rounded-xl px-4 py-2.5 text-sm
-                                 focus:outline-none focus:border-[#f5a623] transition-colors" 
+                                 focus:outline-none focus:border-amber-300 transition-colors" 
                     />
                   </details>
                 </div>
@@ -931,8 +931,8 @@ function CheckoutModal({
                     }
                   }} disabled={!localTable.trim()}
                   className="w-full flex items-center justify-center gap-2
-                             bg-[#f5a623] hover:bg-[#e08a00] disabled:opacity-50
-                             text-[#1a1a1a] font-bold py-3 rounded-xl text-sm transition-colors
+                             bg-amber-300 hover:bg-amber-400 disabled:opacity-50
+                             text-black font-bold py-3 rounded-xl text-sm transition-colors
                              min-h-[48px]">
                   {localTable.trim() 
                     ? <>Confirm Table {localTable} <ChevronRight size={15} /></>
@@ -952,7 +952,7 @@ function CheckoutModal({
                   <ArrowLeft size={18} />
                 </button>
                 <h2 className="text-white font-bold flex items-center gap-2">
-                  <Phone size={16} className="text-[#f5a623]" /> Enter Mobile Number
+                  <Phone size={16} className="text-amber-300" /> Enter Mobile Number
                 </h2>
                 <button onClick={onClose}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
@@ -984,15 +984,15 @@ function CheckoutModal({
                       maxLength={10}
                       className="w-full bg-[#1a1a1a] border border-[#3a3a3a] text-white
                                  placeholder-[#555] rounded-xl pl-9 pr-4 py-2.5 text-sm
-                                 focus:outline-none focus:border-[#f5a623] transition-colors" />
+                                 focus:outline-none focus:border-amber-300 transition-colors" />
                   </div>
                   {phoneError && <p className="text-red-400 text-xs mt-1.5">{phoneError}</p>}
                 </div>
 
                 <button onClick={handlePhoneSubmit} disabled={phoneLoading || !phone.trim()}
                   className="w-full flex items-center justify-center gap-2
-                             bg-[#f5a623] hover:bg-[#e08a00] disabled:opacity-50
-                             text-[#1a1a1a] font-bold py-3 rounded-xl text-sm transition-colors">
+                             bg-amber-300 hover:bg-amber-400 disabled:opacity-50
+                             text-black font-bold py-3 rounded-xl text-sm transition-colors">
                   {phoneLoading
                     ? <><Loader2 size={15} className="animate-spin" /> Verifying…</>
                     : <>Continue <ChevronRight size={15} /></>}
@@ -1035,7 +1035,7 @@ function CheckoutModal({
                   <ArrowLeft size={18} />
                 </button>
                 <h2 className="text-white font-bold flex items-center gap-2">
-                  <TableProperties size={16} className="text-[#f5a623]" /> Confirm Order
+                  <TableProperties size={16} className="text-amber-300" /> Confirm Order
                 </h2>
                 <button onClick={onClose}
                   className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors">
@@ -1108,7 +1108,7 @@ function CheckoutModal({
                   </div>
                   <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl p-3">
                     <p className="text-[#9a9a9a] text-xs mb-0.5">Total</p>
-                    <p className="text-[#f5a623] font-bold text-lg">₹{total}</p>
+                    <p className="text-amber-300 font-bold text-lg">₹{total}</p>
                   </div>
                 </div>
 
@@ -1129,8 +1129,8 @@ function CheckoutModal({
 
                 <button onClick={handlePlaceOrder} disabled={submitting}
                   className="w-full flex items-center justify-center gap-2
-                             bg-[#f5a623] hover:bg-[#e08a00] disabled:opacity-60
-                             text-[#1a1a1a] font-bold py-3.5 rounded-xl text-sm transition-colors">
+                             bg-amber-300 hover:bg-amber-400 disabled:opacity-60
+                             text-black font-bold py-3.5 rounded-xl text-sm transition-colors">
                   {submitting
                     ? <><Loader2 size={15} className="animate-spin" /> Placing Order…</>
                     : <>Place Order <ChevronRight size={16} /></>}
@@ -1161,7 +1161,7 @@ function CheckoutModal({
                     return (
                       <>
                         <p className="text-[#9a9a9a] text-xs">Special Order</p>
-                        <p className="text-[#f5a623] font-bold text-2xl">⭐ MNC Special</p>
+                        <p className="text-amber-300 font-bold text-2xl">⭐ MNC Special</p>
                       </>
                     );
                   }
@@ -1169,12 +1169,12 @@ function CheckoutModal({
                   return orderMode === "takeaway" ? (
                     <>
                       <p className="text-[#9a9a9a] text-xs">Order Type</p>
-                      <p className="text-[#f5a623] font-bold text-2xl">🛍️ Takeaway</p>
+                      <p className="text-amber-300 font-bold text-2xl">🛍️ Takeaway</p>
                     </>
                   ) : (
                     <>
                       <p className="text-[#9a9a9a] text-xs">Table Number</p>
-                      <p className="text-[#f5a623] font-bold text-2xl">{localTable}</p>
+                      <p className="text-amber-300 font-bold text-2xl">{localTable}</p>
                     </>
                   );
                 })()}
@@ -1214,7 +1214,7 @@ function MncSpecialsUpsell({ items, onAddToCart, currentCart }) {
   return (
     <div className="mb-6">
       <h3 className="text-white font-bold text-lg mb-3 flex items-center gap-2">
-        <Gift className="text-[#f5a623]" size={20} />
+        <Gift className="text-amber-300" size={20} />
         Complete Your Meal With
       </h3>
       
@@ -1236,7 +1236,7 @@ function MncSpecialsUpsell({ items, onAddToCart, currentCart }) {
                   </div>
                 )}
                 <div className="absolute top-1 right-1">
-                  <span className="bg-[#f5a623] text-[#1a1a1a] text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  <span className="bg-amber-300 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">
                     MNC Special
                   </span>
                 </div>
@@ -1267,7 +1267,7 @@ function MncSpecialsUpsell({ items, onAddToCart, currentCart }) {
                     }
                   }}
                   className="w-full flex items-center justify-center gap-1 
-                             bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a]
+                             bg-amber-300 hover:bg-amber-400 text-black
                              font-bold text-xs py-2 rounded-lg transition-colors"
                 >
                   <Plus size={12} />
@@ -1326,7 +1326,7 @@ function FullScreenCart({ cart, onUpdateQty, onClose, onCheckout, onAddToCart, i
                     
                     {/* Variant Details */}
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="bg-[#f5a623]/10 text-[#f5a623] text-xs font-medium px-2 py-1 rounded-lg">
+                      <span className="bg-amber-300/10 text-amber-300 text-xs font-medium px-2 py-1 rounded-lg">
                         {entry.variantLabel}
                       </span>
                     </div>
@@ -1356,7 +1356,7 @@ function FullScreenCart({ cart, onUpdateQty, onClose, onCheckout, onAddToCart, i
                         onClick={() => onUpdateQty(key, -1)}
                         className="w-8 h-8 rounded-lg bg-[#1a1a1a] border border-[#3a3a3a] 
                                    flex items-center justify-center text-[#9a9a9a]
-                                   hover:text-white hover:border-[#f5a623]/50 transition-colors"
+                                   hover:text-white hover:border-amber-300/50 transition-colors"
                       >
                         <Minus size={14} />
                       </button>
@@ -1367,14 +1367,14 @@ function FullScreenCart({ cart, onUpdateQty, onClose, onCheckout, onAddToCart, i
                         onClick={() => onUpdateQty(key, +1)}
                         className="w-8 h-8 rounded-lg bg-[#1a1a1a] border border-[#3a3a3a]
                                    flex items-center justify-center text-[#9a9a9a]
-                                   hover:text-white hover:border-[#f5a623]/50 transition-colors"
+                                   hover:text-white hover:border-amber-300/50 transition-colors"
                       >
                         <Plus size={14} />
                       </button>
                     </div>
                     
                     {/* Total price for this item */}
-                    <span className="text-[#f5a623] font-bold text-lg">
+                    <span className="text-amber-300 font-bold text-lg">
                       ₹{entry.price * entry.qty}
                     </span>
                   </div>
@@ -1406,7 +1406,7 @@ function FullScreenCart({ cart, onUpdateQty, onClose, onCheckout, onAddToCart, i
                 <div className="border-t border-[#2e2e2e] pt-2">
                   <div className="flex items-center justify-between">
                     <span className="text-white font-semibold text-lg">Total</span>
-                    <span className="text-[#f5a623] font-bold text-2xl">₹{total}</span>
+                    <span className="text-amber-300 font-bold text-2xl">₹{total}</span>
                   </div>
                 </div>
               </div>
@@ -1415,9 +1415,9 @@ function FullScreenCart({ cart, onUpdateQty, onClose, onCheckout, onAddToCart, i
               <button
                 onClick={onCheckout}
                 className="w-full flex items-center justify-center gap-2
-                           bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a]
+                           bg-amber-300 hover:bg-amber-400 text-black
                            font-bold py-4 rounded-2xl transition-colors
-                           shadow-lg shadow-[#f5a623]/20 text-base"
+                           shadow-lg shadow-amber-300/20 text-base"
               >
                 <ShoppingBag size={18} />
                 Proceed to Checkout
@@ -1656,10 +1656,10 @@ export default function CustomerMenu() {
               <button
                 onClick={() => setTrackerOpen(true)}
                 className="relative flex items-center gap-1.5 bg-[#242424] hover:bg-[#2e2e2e]
-                           border border-[#2e2e2e] hover:border-[#f5a623]/40
+                           border border-[#2e2e2e] hover:border-amber-300/40
                            text-white text-sm font-semibold px-3 py-2 rounded-xl transition-colors"
               >
-                <ClipboardList size={15} className="text-[#f5a623]" />
+                <ClipboardList size={15} className="text-amber-300" />
                 <span className="hidden sm:inline text-xs">Orders</span>
               </button>
             )}
@@ -1668,10 +1668,10 @@ export default function CustomerMenu() {
               className="relative flex items-center gap-2 bg-[#242424] hover:bg-[#2e2e2e]
                          border border-[#2e2e2e] hover:border-[#f5a623]/40
                          text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-              <ShoppingCart size={16} className="text-[#f5a623]" />
+              <ShoppingCart size={16} className="text-amber-300" />
               <span className="hidden xs:inline">Cart</span>
               {count > 0 && (
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-[#f5a623] text-[#1a1a1a]
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-amber-300 text-black
                                  text-xs font-bold rounded-full flex items-center justify-center">
                   {count}
                 </span>
@@ -1689,7 +1689,7 @@ export default function CustomerMenu() {
                               text-xs font-semibold transition-colors whitespace-nowrap
                               min-h-[36px]
                               ${activeCategory === cat
-                                ? "bg-[#f5a623] text-[#1a1a1a]"
+                                ? "bg-amber-300 text-black"
                                 : "text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e]"}`}>
                   {cat}
                 </button>
@@ -1703,6 +1703,40 @@ export default function CustomerMenu() {
         <StreakBanner completedOrders={completedOrders} />
       )}
 
+      {/* Active Order Persistent Banner */}
+      {activeOrder && activeOrder.status === "Open" && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="mx-4 mt-4 mb-2"
+        >
+          <div className="bg-amber-300/10 border border-amber-300/30 rounded-xl p-3 backdrop-blur-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-amber-300 rounded-full animate-pulse"></div>
+                <div>
+                  <p className="text-amber-300 font-semibold text-sm">
+                    You have an active order!
+                  </p>
+                  <p className="text-amber-300/80 text-xs mt-0.5">
+                    Table {activeOrder.tableNumber} • ₹{activeOrder.totalPrice} • {activeOrder.items?.length || 0} items
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setModifyingOrder(activeOrder)}
+                className="bg-amber-300 hover:bg-amber-400 text-black text-xs font-semibold 
+                           px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                <Plus size={12} />
+                Add More Items
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       <main className="px-4 py-4 pb-20">
 
         {!loading && items.length > 0 && (
@@ -1712,7 +1746,7 @@ export default function CustomerMenu() {
                           flex items-center gap-1.5
                           ${showOutOfStock
                             ? "bg-[#2e2e2e] text-[#9a9a9a] border-[#3a3a3a] hover:text-white hover:border-[#4a4a4a]"
-                            : "bg-[#f5a623]/10 text-[#f5a623] border-[#f5a623]/30 hover:bg-[#f5a623]/15"}`}>
+                            : "bg-amber-300/10 text-amber-300 border-amber-300/30 hover:bg-amber-300/15"}`}>
               <div className={`w-2 h-2 rounded-full ${showOutOfStock ? 'bg-green-400' : 'bg-red-400'}`} />
               {showOutOfStock ? "Showing all items" : "Hiding out-of-stock"}
             </button>

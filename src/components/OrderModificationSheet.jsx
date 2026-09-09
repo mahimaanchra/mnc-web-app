@@ -57,35 +57,51 @@ function modCartCount(cart) {
 
 function ModCartRow({ entry, cartKey, onUpdateQty }) {
   return (
-    <div className="flex items-center gap-3 bg-[#1a1a1a] border border-[#2e2e2e] rounded-xl px-3 py-2.5">
-      <div className="flex-1 min-w-0">
-        <p className="text-white text-xs font-semibold truncate">{entry.itemName}</p>
-        <p className="text-[#9a9a9a] text-[11px]">{entry.variantLabel}</p>
+    <div className="bg-[#1a1a1a] border border-[#2e2e2e] rounded-xl p-3">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-semibold">{entry.itemName}</p>
+          <p className="text-[#9a9a9a] text-xs">{entry.variantLabel}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => onUpdateQty(cartKey, -1)}
+            className="w-7 h-7 rounded-lg bg-[#2e2e2e] border border-[#3a3a3a]
+                       flex items-center justify-center text-[#9a9a9a]
+                       hover:text-white transition-colors active:scale-90"
+          >
+            <Minus size={12} />
+          </button>
+          <span className="text-white text-sm font-bold w-6 text-center">{entry.qty}</span>
+          <button
+            type="button"
+            onClick={() => onUpdateQty(cartKey, +1)}
+            className="w-7 h-7 rounded-lg bg-[#2e2e2e] border border-[#3a3a3a]
+                       flex items-center justify-center text-[#9a9a9a]
+                       hover:text-white transition-colors active:scale-90"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+        <span className="text-amber-300 text-sm font-bold flex-shrink-0 min-w-[60px] text-right">
+          ₹{entry.price * entry.qty}
+        </span>
       </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <button
-          type="button"
-          onClick={() => onUpdateQty(cartKey, -1)}
-          className="w-6 h-6 rounded-lg bg-[#2e2e2e] border border-[#3a3a3a]
-                     flex items-center justify-center text-[#9a9a9a]
-                     hover:text-white transition-colors active:scale-90"
-        >
-          <Minus size={10} />
-        </button>
-        <span className="text-white text-xs font-bold w-4 text-center">{entry.qty}</span>
-        <button
-          type="button"
-          onClick={() => onUpdateQty(cartKey, +1)}
-          className="w-6 h-6 rounded-lg bg-[#2e2e2e] border border-[#3a3a3a]
-                     flex items-center justify-center text-[#9a9a9a]
-                     hover:text-white transition-colors active:scale-90"
-        >
-          <Plus size={10} />
-        </button>
-      </div>
-      <span className="text-[#f5a623] text-xs font-bold flex-shrink-0 w-12 text-right">
-        ₹{entry.price * entry.qty}
-      </span>
+      
+      {/* Display add-ons */}
+      {entry.addons?.length > 0 && (
+        <div className="border-t border-[#2e2e2e] pt-2">
+          <p className="text-[#9a9a9a] text-xs mb-1">Add-ons:</p>
+          <div className="flex flex-wrap gap-1">
+            {entry.addons.map((addon, i) => (
+              <span key={i} className="bg-amber-300/10 text-amber-300 text-xs px-2 py-1 rounded-lg border border-amber-300/30">
+                +{addon.label} (₹{addon.price})
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -94,70 +110,106 @@ function ModCartRow({ entry, cartKey, onUpdateQty }) {
 
 function ModMenuTile({ item, onAdd }) {
   const [selectedVariant, setSelectedVariant] = useState(item.variants?.[0] ?? null);
+  const [selectedAddons, setSelectedAddons] = useState([]);
   const [imgErr, setImgErr] = useState(false);
 
   if (!item.inStock) return null; // hide out-of-stock in this view
 
-  const linePrice = selectedVariant?.price ?? 0;
+  const toggleAddon = (addon) =>
+    setSelectedAddons((prev) =>
+      prev.some((a) => a.label === addon.label)
+        ? prev.filter((a) => a.label !== addon.label)
+        : [...prev, addon]
+    );
+
+  const addonTotal = selectedAddons.reduce((s, a) => s + a.price, 0);
+  const linePrice = (selectedVariant?.price ?? 0) + addonTotal;
 
   return (
-    <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl overflow-hidden flex gap-3 p-3">
-      {/* Thumbnail */}
-      <div className="w-16 h-16 rounded-lg bg-[#1e1e1e] overflow-hidden flex-shrink-0">
-        {item.imageUrl && !imgErr ? (
-          <img
-            src={item.imageUrl}
-            alt={item.name}
-            className="w-full h-full object-cover"
-            onError={() => setImgErr(true)}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <UtensilsCrossed size={20} className="text-[#3a3a3a]" />
+    <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl overflow-hidden p-3">
+      <div className="flex gap-3 mb-3">
+        {/* Thumbnail */}
+        <div className="w-16 h-16 rounded-lg bg-[#1e1e1e] overflow-hidden flex-shrink-0">
+          {item.imageUrl && !imgErr ? (
+            <img
+              src={item.imageUrl}
+              alt={item.name}
+              className="w-full h-full object-cover"
+              onError={() => setImgErr(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <UtensilsCrossed size={20} className="text-[#3a3a3a]" />
+            </div>
+          )}
+        </div>
+
+        {/* Details */}
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-semibold leading-tight">{item.name}</p>
+
+          {/* Variant chips — compact */}
+          {item.variants?.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {item.variants.map((v) => (
+                <button
+                  key={v.label}
+                  type="button"
+                  onClick={() => setSelectedVariant(v)}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border transition-colors
+                    ${selectedVariant?.label === v.label
+                      ? "bg-amber-300 text-black border-amber-300"
+                      : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-amber-300/40"}`}
+                >
+                  {v.label} ₹{v.price}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Price and Add button */}
+        <div className="flex flex-col items-end justify-between flex-shrink-0">
+          <span className="text-amber-300 text-sm font-bold">₹{linePrice}</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!selectedVariant) return;
+              onAdd({ item, variant: selectedVariant, price: linePrice, addons: selectedAddons });
+            }}
+            className="flex items-center gap-1 bg-amber-300 hover:bg-amber-400
+                       text-black text-xs font-bold px-3 py-1.5 rounded-lg
+                       transition-colors active:scale-95 mt-1"
+          >
+            <Plus size={11} /> Add
+          </button>
+        </div>
+      </div>
+
+      {/* Add-ons section */}
+      {item.addons?.length > 0 && (
+        <div className="border-t border-[#2e2e2e] pt-3">
+          <p className="text-[#9a9a9a] text-xs mb-2">Add-ons</p>
+          <div className="flex flex-wrap gap-1.5">
+            {item.addons.map((addon) => {
+              const active = selectedAddons.some((s) => s.label === addon.label);
+              return (
+                <button
+                  key={addon.label}
+                  type="button"
+                  onClick={() => toggleAddon(addon)}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-semibold border transition-colors
+                    ${active
+                      ? "bg-amber-300/20 text-amber-300 border-amber-300/50"
+                      : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-amber-300/30"}`}
+                >
+                  +{addon.label} (₹{addon.price})
+                </button>
+              );
+            })}
           </div>
-        )}
-      </div>
-
-      {/* Details */}
-      <div className="flex-1 min-w-0">
-        <p className="text-white text-sm font-semibold leading-tight truncate">{item.name}</p>
-
-        {/* Variant chips — compact */}
-        {item.variants?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {item.variants.map((v) => (
-              <button
-                key={v.label}
-                type="button"
-                onClick={() => setSelectedVariant(v)}
-                className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border transition-colors
-                  ${selectedVariant?.label === v.label
-                    ? "bg-[#f5a623] text-[#1a1a1a] border-[#f5a623]"
-                    : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#f5a623]/40"}`}
-              >
-                {v.label} ₹{v.price}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Add button */}
-      <div className="flex flex-col items-end justify-between flex-shrink-0">
-        <span className="text-[#f5a623] text-sm font-bold">₹{linePrice}</span>
-        <button
-          type="button"
-          onClick={() => {
-            if (!selectedVariant) return;
-            onAdd({ item, variant: selectedVariant, price: linePrice });
-          }}
-          className="flex items-center gap-1 bg-[#f5a623] hover:bg-[#e08a00]
-                     text-[#1a1a1a] text-xs font-bold px-3 py-1.5 rounded-lg
-                     transition-colors active:scale-95 mt-1"
-        >
-          <Plus size={11} /> Add
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -192,7 +244,7 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
   [menuItems, activeCategory]);
 
   // Cart helpers
-  const handleAdd = ({ item, variant, price }) => {
+  const handleAdd = ({ item, variant, price, addons = [] }) => {
     const key = modCartKey(item.id, variant.label);
     setModCart((prev) => ({
       ...prev,
@@ -204,6 +256,7 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
             variantLabel: variant.label,
             price,
             qty: 1,
+            addons: addons || [], // Preserve add-ons
           },
     }));
   };
@@ -242,6 +295,7 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
           variantLabel: e.variantLabel,
           price:        e.price,
           qty:          e.qty,
+          addons:       e.addons || [], // Include add-ons in the payload
           status:       "Pending", // Individual item status
           addedAt:      new Date(),
         })),
