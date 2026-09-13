@@ -38,4 +38,376 @@
   /* Respect iOS home-indicator safe area */
   .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
   .mb-safe { margin-bottom:  env(safe-area-inset-bottom, 16px); }
+
+  /* Robust button base classes to prevent overlap and ensure proper scaling */
+  .btn-base {
+    @apply inline-flex items-center justify-center font-semibold transition-all duration-200;
+    @apply border border-transparent rounded-xl;
+    @apply min-h-[44px] px-4 py-2.5 gap-2;
+    @apply text-sm leading-tight;
+    @apply active:scale-95 disabled:cursor-not-allowed disabled:opacity-50;
+    /* Prevent text overflow and ensure proper wrapping */
+    @apply whitespace-nowrap overflow-hidden text-ellipsis;
+    /* Ensure buttons don't shrink below minimum size */
+    flex-shrink: 0;
+  }
+
+  /* Primary action buttons */
+  .btn-primary {
+    @apply btn-base bg-amber-300 hover:bg-amber-400 text-black;
+    @apply border-amber-300 shadow-sm shadow-amber-300/20;
+    @apply hover:shadow-md hover:shadow-amber-300/30;
+  }
+
+  /* Secondary buttons */
+  .btn-secondary {
+    @apply btn-base bg-[#242424] hover:bg-[#2e2e2e] text-white;
+    @apply border-[#2e2e2e] hover:border-amber-300/40;
+  }
+
+  /* Outline variant buttons */
+  .btn-outline {
+    @apply btn-base bg-transparent text-[#9a9a9a] hover:text-white;
+    @apply border-[#3a3a3a] hover:border-amber-300/50 hover:bg-[#2e2e2e];
+  }
+
+  /* Danger buttons */
+  .btn-danger {
+    @apply btn-base bg-red-600 hover:bg-red-700 text-white;
+    @apply border-red-600;
+  }
+
+  /* Small variant for compact spaces */
+  .btn-sm {
+    @apply min-h-[36px] px-3 py-2 text-xs;
+  }
+
+  /* Large variant for prominent actions */
+  .btn-lg {
+    @apply min-h-[52px] px-6 py-3 text-base;
+  }
+
+  /* Toggle button states */
+  .btn-toggle-active {
+    @apply bg-amber-300 text-black border-amber-300 shadow-sm scale-105;
+  }
+
+  .btn-toggle-inactive {
+    @apply bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a];
+    @apply hover:border-amber-300/50 hover:text-amber-300;
+  }
+
+  /* Card base styling with proper spacing */
+  .card-base {
+    @apply bg-[#242424] border border-[#2e2e2e] rounded-2xl overflow-hidden;
+    @apply transition-all duration-300 hover:border-amber-300/30;
+  }
+
+  /* Responsive spacing utilities */
+  .space-y-responsive > * + * {
+    @apply mt-4 sm:mt-6;
+  }
+
+  .space-x-responsive > * + * {
+    @apply ml-2 sm:ml-3 md:ml-4;
+  }
+
+  /* Grid responsive layouts */
+  .grid-responsive-cards {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6;
+  }
+
+  /* Flexbox responsive wrapping */
+  .flex-wrap-responsive {
+    @apply flex flex-wrap gap-2 sm:gap-3;
+  }
+
+  /* Text scaling utilities */
+  .text-responsive-sm {
+    @apply text-xs sm:text-sm;
+  }
+
+  .text-responsive-base {
+    @apply text-sm sm:text-base;
+  }
+
+  .text-responsive-lg {
+    @apply text-base sm:text-lg md:text-xl;
+  }
+
+  /* Padding responsive utilities */
+  .p-responsive {
+    @apply p-3 sm:p-4 md:p-6;
+  }
+
+  .px-responsive {
+    @apply px-3 sm:px-4 md:px-6;
+  }
+
+  .py-responsive {
+    @apply py-3 sm:py-4 md:py-6;
+  }
+
+  /* Container max-width with proper margins */
+  .container-responsive {
+    @apply w-full max-w-md mx-auto px-4 sm:px-6;
+  }
+
+  /* Prevent layout shifts with min-heights */
+  .min-h-button {
+    @apply min-h-[44px];
+  }
+
+  .min-h-card {
+    @apply min-h-[200px];
+  }
+
+  /* Ensure proper aspect ratios for images */
+  .aspect-card {
+    @apply aspect-[4/3] object-cover w-full h-full;
+  }
+
+  /* Price display formatting */
+  .price-display {
+    @apply font-bold text-amber-300 tracking-wide;
+  }
+
+  .price-secondary {
+    @apply text-xs text-[#9a9a9a] font-normal;
+  }
+
+  /* Status indicators */
+  .status-indicator {
+    @apply w-2 h-2 rounded-full animate-pulse flex-shrink-0;
+  }
+
+  /* Backdrop and overlay styling */
+  .backdrop-blur-strong {
+    @apply backdrop-blur-md bg-black/75;
+  }
+
+  /* Smooth animations */
+  .animate-scale-in {
+    @apply animate-in slide-in-from-bottom-4 fade-in-0 duration-300;
+  }
+
+  .animate-scale-out {
+    @apply animate-out slide-out-to-bottom-4 fade-out-0 duration-200;
+  }
+
+  /* Focus styles for accessibility */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-amber-300/50 focus:ring-offset-2 focus:ring-offset-[#1a1a1a];
+  }
+
+  /* Modern horizontal card styling */
+  .menu-card {
+    @apply bg-[#242424] border border-[#2e2e2e] rounded-2xl overflow-hidden;
+    @apply transition-all duration-300 hover:border-amber-300/30;
+    @apply flex flex-row items-center gap-4 p-4;
+  }
+
+  .menu-card-image {
+    @apply w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden flex-shrink-0;
+    @apply bg-[#1e1e1e] flex items-center justify-center;
+  }
+
+  .menu-card-content {
+    @apply flex-1 min-w-0 space-y-2;
+  }
+
+  .menu-card-title {
+    @apply text-white font-semibold text-base leading-tight;
+  }
+
+  .menu-card-description {
+    @apply text-[#9a9a9a] text-sm leading-relaxed;
+    @apply overflow-hidden text-ellipsis whitespace-nowrap;
+  }
+
+  .menu-card-price {
+    @apply price-display text-lg;
+  }
+
+  .menu-card-actions {
+    @apply flex flex-col items-end justify-center gap-3 flex-shrink-0;
+  }
+
+  /* Single-column grid for horizontal cards */
+  .menu-grid-horizontal {
+    @apply space-y-3 sm:space-y-4;
+  }
+
+  /* Text truncation utilities */
+  .truncate-1 {
+    @apply overflow-hidden text-ellipsis whitespace-nowrap;
+  }
+
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Enhanced modal styling */
+  .modal-backdrop {
+    @apply fixed inset-0 bg-black/80 z-50 backdrop-blur-sm;
+    @apply flex items-end sm:items-center justify-center p-4;
+  }
+
+  .modal-content {
+    @apply bg-[#1e1e1e] border border-[#2e2e2e] rounded-2xl overflow-hidden;
+    @apply w-full max-w-lg max-h-[90vh] flex flex-col;
+    @apply shadow-2xl shadow-black/50;
+  }
+
+  .modal-header {
+    @apply relative overflow-hidden;
+  }
+
+  .modal-hero-image {
+    @apply w-full h-48 sm:h-56 object-cover;
+  }
+
+  .modal-hero-overlay {
+    @apply absolute inset-0 bg-gradient-to-t from-black/60 to-transparent;
+  }
+
+  .modal-hero-content {
+    @apply absolute bottom-0 left-0 right-0 p-4 text-white;
+  }
+
+  .modal-body {
+    @apply flex-1 overflow-y-auto;
+  }
+
+  .modal-section {
+    @apply p-4 border-b border-[#2e2e2e] space-y-4;
+  }
+
+  .modal-section:last-child {
+    @apply border-b-0;
+  }
+
+  .section-title {
+    @apply text-white font-semibold text-base flex items-center justify-between;
+  }
+
+  .variant-option {
+    @apply w-full flex items-center justify-between p-4 rounded-xl border transition-all duration-200;
+    @apply hover:border-amber-300/50 cursor-pointer;
+  }
+
+  .variant-option-selected {
+    @apply bg-amber-300/10 text-amber-300 border-amber-300/50;
+  }
+
+  .variant-option-default {
+    @apply bg-[#242424] text-white border-[#2e2e2e];
+  }
+
+  .addon-option {
+    @apply w-full flex items-center justify-between p-3 rounded-xl border transition-all duration-200;
+    @apply hover:border-amber-300/30 cursor-pointer;
+  }
+
+  .addon-option-selected {
+    @apply bg-amber-300/5 text-amber-300 border-amber-300/30;
+  }
+
+  .addon-option-default {
+    @apply bg-[#242424] text-white border-[#2e2e2e];
+  }
+
+  .radio-button {
+    @apply w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0;
+    @apply transition-all duration-200;
+  }
+
+  .radio-button-selected {
+    @apply border-amber-300 bg-amber-300/10;
+  }
+
+  .radio-button-default {
+    @apply border-[#3a3a3a];
+  }
+
+  .radio-dot {
+    @apply w-2.5 h-2.5 bg-amber-300 rounded-full;
+  }
+
+  .checkbox {
+    @apply w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0;
+    @apply transition-all duration-200;
+  }
+
+  .checkbox-selected {
+    @apply border-amber-300 bg-amber-300;
+  }
+
+  .checkbox-default {
+    @apply border-[#3a3a3a];
+  }
+
+  .sticky-footer {
+    @apply sticky bottom-0 bg-[#1a1a1a] border-t border-[#2e2e2e] p-4;
+    @apply backdrop-blur-sm bg-[#1a1a1a]/95;
+  }
+
+  .price-breakdown {
+    @apply flex items-center justify-between text-sm mb-3;
+  }
+
+  .total-price {
+    @apply flex items-center justify-between font-bold text-lg mb-4;
+  }
+
+  /* Enhanced Quantity Stepper */
+  .quantity-stepper-container {
+    @apply flex items-center justify-center gap-6 py-4;
+  }
+
+  .quantity-stepper-button {
+    @apply w-12 h-12 sm:w-14 sm:h-14 rounded-xl border-2 border-[#3a3a3a];
+    @apply bg-[#2e2e2e] hover:bg-[#3a3a3a] active:bg-[#4a4a4a];
+    @apply flex items-center justify-center transition-all duration-200;
+    @apply text-white hover:text-amber-300 active:scale-95;
+    @apply shadow-lg hover:shadow-xl;
+    @apply focus:outline-none focus:ring-2 focus:ring-amber-300/50 focus:ring-offset-2 focus:ring-offset-[#1a1a1a];
+  }
+
+  .quantity-stepper-button:disabled {
+    @apply opacity-40 cursor-not-allowed bg-[#1a1a1a] border-[#2a2a2a];
+    @apply hover:bg-[#1a1a1a] hover:text-white active:scale-100;
+    @apply shadow-none hover:shadow-none;
+  }
+
+  .quantity-stepper-display {
+    @apply text-white font-bold text-2xl sm:text-3xl min-w-[4rem] text-center;
+    @apply bg-[#242424] border border-[#3a3a3a] rounded-xl px-4 py-3 sm:px-6 sm:py-4;
+    @apply shadow-inner;
+  }
+
+  .quantity-stepper-icon {
+    @apply w-6 h-6 sm:w-7 sm:h-7;
+  }
+
+  /* Compact quantity stepper for other uses */
+  .quantity-stepper-compact {
+    @apply flex items-center justify-center gap-3;
+  }
+
+  .quantity-stepper-compact .quantity-stepper-button {
+    @apply w-8 h-8 rounded-lg;
+  }
+
+  .quantity-stepper-compact .quantity-stepper-display {
+    @apply text-base font-bold min-w-[2.5rem] px-3 py-1.5;
+  }
+
+  .quantity-stepper-compact .quantity-stepper-icon {
+    @apply w-4 h-4;
+  }
 }

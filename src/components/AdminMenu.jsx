@@ -62,9 +62,10 @@ const validateImageSize = (base64String, maxSizeKB = 800) => {
 };
 
 const CATEGORIES = [
-  "Cold Coffee","Mocktails","Ice Tea","Shakes","Hot Beverages",
-  "Burger","Sandwiches","Vada Pav","Pizza","Fries",
-  "Chinese","Maggi","Pasta","Bread","Wrap","Dessert","Combos",
+  "MNC Cold Coffee", "MNC Shakes", "MNC Sandwiches", "Mocktails", "Iced Tea", 
+  "Hot Beverages", "Burger", "Vada Pav", "Pizza", "Maggi", 
+  "Fries and Munchies", "Chinese", "Dumplings", "Healthy Food", "Combos",
+  "Pasta", "Bread", "Wrap", "Dessert"
 ];
 
 const SAMPLE_IMAGES = [
@@ -240,7 +241,7 @@ const sanitizeItem = (form) => ({
   variants: form.variants
     .filter((v) => v.label.trim() !== "" && v.price !== "")
     .map((v)    => ({ 
-      label: v.label.trim(), 
+      label: v.label.trim().replace(/;/g, '').replace(/[^\w\s\-.()/]/g, ''), // Clean stray characters
       price: parseFloat(v.price),
       inStock: v.inStock !== false // Default to true if not explicitly set
     })),
@@ -499,369 +500,191 @@ function ItemStatusRow({ item, onStatusChange, isUpdating }) {
   );
 }
 
+// ─── PROFESSIONAL KITCHEN DISPLAY SYSTEM (KDS) ORDER CARD ──────────────────────
 function OrderCard({ order, onStatusChange, onItemStatusChange, isUpdating }) {
-  const meta = STATUS_META[order.status] ?? STATUS_META.Open;
-  const [expandedItems, setExpandedItems] = useState(false);
-
   // ── Modification data (backward-compatible) ────────────────────────────────
   const modifications = order.modifications ?? [];
   const hasModification = order.hasModification && modifications.length > 0;
-
-  // Flatten all newly-added items for the badge summary (last batch only)
-  const lastMod = modifications.length > 0 ? modifications[modifications.length - 1] : null;
-  const lastModItems = lastMod?.items ?? [];
-
-  // Running total = base totalPrice (already incremented via Firestore increment)
   const runningTotal = order.totalPrice ?? 0;
 
-  // Helper to get all items with their statuses (original + modifications)
-  const getAllItems = () => {
-    const originalItems = (order.items ?? []).map(item => ({
-      ...item,
-      source: 'original',
-      id: `original-${item.itemId}-${item.variantLabel}`,
-    }));
+  // Helper function to safely render add-ons with consistent property handling
+  const renderAddons = (addons) => {
+    if (!addons?.length) return null;
     
-    const modificationItems = modifications.flatMap((mod, modIndex) => 
-      (mod.items ?? []).map((item, itemIndex) => ({
-        ...item,
-        source: 'modification',
-        modIndex,
-        id: `mod-${modIndex}-${itemIndex}`,
-      }))
+    return (
+      <div className="mt-1 ml-8 text-xs">
+        <span className="text-orange-600 font-semibold">
+          + {addons.map(addon => {
+            const name = addon.label || addon.addonName || addon.name || 'Unknown';
+            const price = addon.price || addon.addonPrice || 0;
+            return `${name.toUpperCase()} (₹${price})`;
+          }).join(', ')}
+        </span>
+      </div>
     );
-    
-    return [...originalItems, ...modificationItems];
   };
 
-  const allItems = getAllItems();
-  const pendingItems = allItems.filter(item => item.status === 'Pending');
-  const preparingItems = allItems.filter(item => item.status === 'Preparing'); 
-  const readyItems = allItems.filter(item => item.status === 'Ready');
+  // Helper to render clean horizontal item rows
+  const renderCleanItemRow = (item, key, isModification = false) => (
+    <div key={key} className="space-y-1">
+      {/* Clean Horizontal Item Row */}
+      <div className="flex items-center gap-3">
+        {/* Quantity */}
+        <span className={`text-sm font-bold min-w-[30px] ${
+          isModification ? 'text-amber-700' : 'text-gray-900'
+        }`}>
+          {item.qty}×
+        </span>
+        
+        {/* Item Name */}
+        <span className={`font-semibold flex-1 ${
+          isModification ? 'text-amber-800' : 'text-gray-900'
+        }`}>
+          {item.itemName}
+        </span>
+        
+        {/* Size/Variant Badge */}
+        {item.variantLabel && (
+          <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+            isModification 
+              ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+              : 'bg-gray-100 text-gray-700 border border-gray-200'
+          }`}>
+            {item.variantLabel}
+          </span>
+        )}
+        
+        {/* Free Streak Badge */}
+        {item.isFreeStreak && (
+          <span className="text-xs font-bold px-2 py-1 rounded-full bg-green-100 text-green-700 border border-green-200">
+            FREE
+          </span>
+        )}
+        
+        {/* Price */}
+        <span className={`font-bold text-sm min-w-[60px] text-right ${
+          item.isFreeStreak ? "text-green-600" : 
+          isModification ? "text-amber-800" : "text-gray-900"
+        }`}>
+          {item.isFreeStreak ? "FREE" : `₹${item.price * item.qty}`}
+        </span>
+      </div>
+      
+      {/* Add-ons Sub-text */}
+      {renderAddons(item.addons)}
+    </div>
+  );
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-      className={`rounded-2xl border shadow-sm overflow-hidden
-                  ${order.status === "Completed"
-                    ? "bg-gray-50/70 border-gray-200 opacity-80"
-                    : "bg-white border-gray-200"}`}
+      className={`rounded-xl border bg-white shadow-sm overflow-hidden
+                  ${order.status === "Completed" ? "opacity-70" : ""}`}
     >
-      {/* ── Professional Modification Alert Banner ── */}
-      {hasModification && order.status !== "Completed" && (
-        <div className="flex items-center gap-3 px-4 py-3
-                        bg-gradient-to-r from-amber-50 to-orange-50 
-                        border-l-4 border-amber-500 border-b border-amber-200">
-          <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
-            <span className="text-white font-bold text-sm">+</span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-amber-800 text-sm font-bold leading-tight">
-              Customer Added Items
-            </p>
-            <p className="text-amber-700 text-xs mt-0.5 leading-snug">
-              {lastModItems.map((it, i) => (
-                <span key={i}>
-                  {i > 0 && " • "}
-                  <strong className="text-amber-900">{it.itemName}</strong> ×{it.qty}
-                  {it.addons?.length > 0 && (
-                    <span className="text-orange-600 ml-1">
-                      (+{it.addons.length} extra{it.addons.length > 1 ? 's' : ''})
-                    </span>
-                  )}
-                </span>
-              ))}
-              {modifications.length > 1 && (
-                <span className="text-amber-600 ml-2 font-medium">
-                  +{modifications.length - 1} more batch{modifications.length > 2 ? "es" : ""}
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="flex-shrink-0 text-xs font-bold text-amber-800
-                             bg-amber-200 border border-amber-400 px-3 py-1 rounded-full
-                             whitespace-nowrap">
-              New Items
+      {/* ── CLEAN KDS HEADER ── */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center gap-3">
+          {/* Table Number - Primary */}
+          <span className="text-xl font-black text-gray-900">
+            Table {order.tableNumber ?? "—"}
+          </span>
+          
+          {/* Customer Phone - Secondary */}
+          {order.customerPhone && (
+            <span className="text-sm text-gray-600 font-medium">
+              {order.customerPhone}
             </span>
-          </div>
-        </div>
-      )}
-
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-base font-bold text-gray-900">
-                Table {order.tableNumber ?? "—"}
-              </span>
-              {order.customerPhone && (
-                <span className="text-xs text-gray-600">· {order.customerPhone}</span>
-              )}
-              {order.isStreakOrder && (
-                <span className="text-[10px] font-black bg-amber-400 text-amber-950
-                                 px-2 py-0.5 rounded-md leading-tight whitespace-nowrap">
-                  🎁 STREAK #7
-                </span>
-              )}
-            </div>
-            <span className="text-xs text-gray-600">{timeAgo(order.createdAt)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1
-                              rounded-full border ${meta.color}`}>
-              {meta.icon}{order.status}
+          )}
+          
+          {/* Order Status Badge - Only if not Open */}
+          {order.status !== "Open" && (
+            <span className={`text-xs px-2 py-1 rounded-full font-bold border ${
+              STATUS_META[order.status]?.color || STATUS_META.Open.color
+            }`}>
+              {order.status.toUpperCase()}
             </span>
-          </div>
+          )}
         </div>
+        
+        {/* Time Elapsed */}
+        <div className="text-sm font-medium text-gray-500">
+          {timeAgo(order.createdAt)}
+        </div>
+      </div>
 
-        {/* Kitchen Status Summary */}
-        {order.status === "Open" && (
-          <div className="mb-3 p-3 bg-gray-50 rounded-xl">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Kitchen Status</span>
-              <button 
-                onClick={() => setExpandedItems(!expandedItems)}
-                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-              >
-                {expandedItems ? 'Collapse' : 'Expand'}
-                <ChevronDown size={12} className={`transition-transform ${expandedItems ? 'rotate-180' : ''}`} />
-              </button>
-            </div>
-            <div className="flex gap-3 text-xs">
-              {pendingItems.length > 0 && (
-                <span className="flex items-center gap-1 text-yellow-600">
-                  <Clock size={10} /> {pendingItems.length} Pending
+      {/* ── CLEAN ITEM DISPLAY ── */}
+      <div className="p-4 space-y-3">
+        {/* Original Items */}
+        {order.items?.map((item, i) => renderCleanItemRow(item, `orig-${i}`, false))}
+
+        {/* Customer Added Items */}
+        {modifications.map((mod, modIndex) => (
+          <div key={`mod-${modIndex}`}>
+            {/* Subtle Separator for Added Items */}
+            {modIndex === 0 && (
+              <div className="flex items-center gap-2 my-3 py-2">
+                <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
+                <span className="text-xs text-amber-700 font-bold uppercase tracking-wide">
+                  Customer Added
                 </span>
-              )}
-              {preparingItems.length > 0 && (
-                <span className="flex items-center gap-1 text-blue-600">
-                  <ChefHat size={10} /> {preparingItems.length} Preparing
+                <div className="flex-1 h-px bg-amber-200"></div>
+                <span className="text-xs text-amber-600 font-medium">
+                  {mod.addedAt ? (mod.addedAt.toDate ? mod.addedAt.toDate() : new Date(mod.addedAt)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ''}
                 </span>
-              )}
-              {readyItems.length > 0 && (
-                <span className="flex items-center gap-1 text-amber-600">
-                  <CheckCircle2 size={10} /> {readyItems.length} Ready
+              </div>
+            )}
+            
+            {/* Added Items */}
+            {(mod.items ?? []).map((item, i) => renderCleanItemRow(item, `mod-${modIndex}-${i}`, true))}
+            
+            {/* Order Note */}
+            {mod.note && (
+              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                <span className="text-blue-800 text-sm font-medium">
+                  Note: "{mod.note}"
                 </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── Detailed item view (expandable) ── */}
-        {expandedItems && order.status === "Open" && (
-          <div className="mb-3 space-y-3">
-            {/* Original items */}
-            <div>
-              <p className="text-xs font-bold text-gray-600 mb-2">Original Order</p>
-              <div className="space-y-2">
-                {(order.items ?? []).map((item, i) => (
-                  <ItemStatusRow 
-                    key={`original-${i}`} 
-                    item={item} 
-                    onStatusChange={(newStatus) => onItemStatusChange(order.id, 'original', i, newStatus)}
-                    isUpdating={isUpdating}
-                  />
-                ))}
               </div>
-            </div>
-
-            {/* Modification batches */}
-            {modifications.map((mod, modIndex) => (
-              <div key={modIndex}>
-                <p className="text-xs font-bold text-amber-600 mb-2">
-                  Added Items - Batch {modIndex + 1}
-                  {mod.addedAt && (
-                    <span className="font-normal text-gray-500 ml-1">
-                      ({mod.addedAt.toDate 
-                        ? mod.addedAt.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                        : new Date(mod.addedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
-                    </span>
-                  )}
-                </p>
-                <div className="space-y-2">
-                  {(mod.items ?? []).map((item, itemIndex) => (
-                    <ItemStatusRow 
-                      key={`mod-${modIndex}-${itemIndex}`} 
-                      item={item} 
-                      onStatusChange={(newStatus) => onItemStatusChange(order.id, 'modification', modIndex, newStatus, itemIndex)}
-                      isUpdating={isUpdating}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Professional Order Layout — Ticket Style ── */}
-        {!expandedItems && (
-          <div className="space-y-4">
-            {/* ORIGINAL ORDER ITEMS */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Original Order</span>
-                <div className="flex-1 h-px bg-gray-200"></div>
-              </div>
-              
-              <div className="space-y-3">
-                {order.items?.map((it, i) => (
-                  <div key={i} className="bg-gray-50 rounded-lg p-4 border-l-4 border-gray-300">
-                    {/* Main item info */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="bg-gray-600 text-white text-xs font-bold px-2 py-1 rounded-full">
-                            {it.qty}×
-                          </span>
-                          <span className="text-gray-900 font-semibold text-base">
-                            {it.itemName}
-                          </span>
-                          {it.variantLabel && (
-                            <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full border">
-                              {it.variantLabel}
-                            </span>
-                          )}
-                        </div>
-                        
-                        {/* COMPACT ADD-ONS SUB-TEXT */}
-                        {it.addons?.length > 0 && (
-                          <div className="mt-1 ml-6">
-                            <span className="text-orange-600 font-bold text-xs">
-                              + {it.addons.map(addon => addon.label).join(' & ').toUpperCase()}
-                            </span>
-                            <span className="text-orange-500 text-xs ml-2">
-                              (+₹{it.addons.reduce((sum, addon) => sum + addon.price, 0)})
-                            </span>
-                          </div>
-                        )}
-                        
-                     
-                      </div>
-                      
-                      <div className="text-right">
-                        <span className={`text-lg font-bold ${it.isFreeStreak ? "text-green-600" : "text-gray-700"}`}>
-                          {it.isFreeStreak ? "FREE" : `₹${it.price * it.qty}`}
-                        </span>
-                        {it.isFreeStreak && (
-                          <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full mt-1">
-                            🎁 STREAK REWARD
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* CUSTOMER ADDED ITEMS */}
-            {modifications.map((mod, mi) => (
-              <div key={mi}>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                  <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">
-                    Customer Added - Batch {mi + 1}
-                  </span>
-                  <div className="flex-1 h-px bg-amber-200"></div>
-                  <span className="text-xs text-amber-600 font-medium">
-                    {mod.addedAt ? (mod.addedAt.toDate ? mod.addedAt.toDate() : new Date(mod.addedAt)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ''}
-                  </span>
-                </div>
-                
-                <div className="space-y-3">
-                  {(mod.items ?? []).map((it, i) => (
-                    <div key={i} className="bg-amber-50 rounded-lg p-4 border-l-4 border-amber-500">
-                      {/* Main item info */}
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">
-                              {it.qty}×
-                            </span>
-                            <span className="text-amber-900 font-semibold text-base">
-                              {it.itemName}
-                            </span>
-                            {it.variantLabel && (
-                              <span className="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full border border-amber-300">
-                                {it.variantLabel}
-                              </span>
-                            )}
-                          </div>
-                          
-                          {/* COMPACT ADD-ONS SUB-TEXT FOR CUSTOMER ADDED ITEMS */}
-                          {it.addons?.length > 0 && (
-                            <div className="mt-1 ml-6">
-                              <span className="text-red-600 font-bold text-sm">
-                                + {it.addons.map(addon => addon.label).join(' & ').toUpperCase()}
-                              </span>
-                              <span className="text-red-500 text-xs ml-2">
-                                (+₹{it.addons.reduce((sum, addon) => sum + addon.price, 0)})
-                              </span>
-                            </div>
-                          )}
-                          
-                          {/* Status indicator for Open orders */}
-                          {order.status === "Open" && it.status && (
-                            <div className="mt-2">
-                              <span className={`text-xs px-2 py-1 rounded-full border font-medium ${STATUS_META[it.status]?.color || STATUS_META.Pending.color}`}>
-                                {STATUS_META[it.status]?.icon} {it.status}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <span className="text-amber-800 text-lg font-bold">
-                          ₹{it.price * it.qty}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Batch note */}
-                {mod.note && (
-                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-blue-800 text-sm italic">
-                      <span className="font-semibold">Note:</span> "{mod.note}"
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-100">
-          <div className="flex items-baseline gap-1.5 min-w-0">
-            <span className="text-xs text-gray-600 font-medium truncate">{order.paymentMethod}</span>
-            <span className="text-sm font-bold text-gray-900 flex-shrink-0">₹{runningTotal}</span>
-            {hasModification && (
-              <span className="text-[10px] font-semibold text-amber-600 flex-shrink-0">
-                (incl. add-ons)
-              </span>
             )}
           </div>
-          {order.status === "Open" ? (
+        ))}
+      </div>
+
+      {/* ── CLEAN KDS FOOTER ── */}
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t border-gray-100">
+        {/* Payment Method */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600 font-medium">
+            {order.paymentMethod}
+          </span>
+          {hasModification && (
+            <span className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-medium">
+              +ITEMS
+            </span>
+          )}
+        </div>
+        
+        {/* Total & Action */}
+        <div className="flex items-center gap-4">
+          <span className="text-xl font-black text-gray-900">
+            ₹{runningTotal}
+          </span>
+          
+          {/* Master Completion Button */}
+          {order.status !== "Completed" && (
             <button
-              type="button"
               onClick={() => onStatusChange(order.id, "Completed")}
               disabled={isUpdating}
-              className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700
-                         disabled:opacity-60 text-white text-xs font-semibold
-                         px-4 py-2.5 rounded-lg transition-colors
-                         min-h-[44px] active:scale-95 flex-shrink-0 ml-auto"
+              className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-bold text-sm rounded-lg transition-colors shadow-sm"
             >
-              {isUpdating
-                ? <Loader2 size={12} className="animate-spin" />
-                : <CircleDollarSign size={12} />}
-              Complete & Pay
+              {isUpdating ? "..." : "COMPLETE"}
             </button>
-          ) : (
-            <span className="text-xs text-green-700 font-bold flex items-center gap-1 flex-shrink-0 ml-auto">
-              <CheckCircle2 size={13} /> Completed
-            </span>
+          )}
+          
+          {order.status === "Completed" && (
+            <div className="flex items-center gap-2 text-green-700">
+              <CheckCircle2 size={16} />
+              <span className="font-bold text-sm">PAID</span>
+            </div>
           )}
         </div>
       </div>
@@ -1181,11 +1004,25 @@ export default function AdminMenu() {
   const handleOrderStatus = async (orderId, newStatus) => {
     setUpdatingOrderId(orderId);
     try {
-      await updateDoc(doc(db, "orders", orderId), {
-        status: newStatus, updatedAt: serverTimestamp(),
-      });
-    } catch (err) { console.error(err); }
-    finally { setUpdatingOrderId(null); }
+      // Only allow completion transition - all other status changes happen at item level
+      if (newStatus === "Completed") {
+        await updateDoc(doc(db, "orders", orderId), {
+          status: "Completed", 
+          completedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // For non-completion status changes, update master status based on item states
+        await updateDoc(doc(db, "orders", orderId), {
+          status: newStatus, 
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) { 
+      console.error('Order status update failed:', err); 
+    } finally { 
+      setUpdatingOrderId(null); 
+    }
   };
 
   const handleItemStatusChange = async (orderId, source, index, newStatus, subIndex = null) => {
@@ -1244,12 +1081,12 @@ export default function AdminMenu() {
     return matchCat && (!q || item.name?.toLowerCase().includes(q) || item.category?.toLowerCase().includes(q));
   });
 
-  // Crowd Management Filter: Open Orders vs Completed History
-  const activeOrders = orders.filter((o) => o.status === "Open");
+  // Crowd Management Filter: Active Orders (Open, Pending, Preparing, Ready) vs Completed History
+  const activeOrders = orders.filter((o) => ["Open", "Pending", "Preparing", "Ready"].includes(o.status));
   const historyOrders = orders.filter((o) => o.status === "Completed");
   const displayedOrders = orderSubView === "active" ? activeOrders : historyOrders;
 
-  const openCount = orders.filter((o) => o.status === "Open").length;
+  const openCount = orders.filter((o) => ["Open", "Pending", "Preparing", "Ready"].includes(o.status)).length;
 
   return (
     <div className="min-h-screen bg-gray-50" onClick={resumeAudioCtx}>
@@ -1623,7 +1460,7 @@ export default function AdminMenu() {
                               ${orderSubView === "active"
                                 ? "bg-amber-500 text-white border-amber-500 shadow-sm"
                                 : "bg-white text-gray-600 border-gray-200 hover:border-amber-300"}`}>
-                  <Clock size={13} /> Open Orders ({activeOrders.length})
+                  <Clock size={13} /> Active Orders ({activeOrders.length})
                 </button>
                 <button type="button" onClick={() => setOrderSubView("history")}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-colors border
