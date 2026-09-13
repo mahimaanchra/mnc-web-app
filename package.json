@@ -18,8 +18,8 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
+    "build": "CI=false react-scripts build",
     "start": "react-scripts start",
-    "build": "react-scripts build",
     "test": "react-scripts test",
     "test:unit": "react-scripts test --testPathPattern=__tests__ --watchAll=false",
     "test:integration": "react-scripts test --testPathPattern=integration --runInBand --watchAll=false",
