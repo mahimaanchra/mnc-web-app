@@ -18,14 +18,14 @@
  */
 
 import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   doc, updateDoc, arrayUnion, increment, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import {
   X, Plus, Minus, ShoppingBag, ChefHat, CheckCircle2,
-  UtensilsCrossed, Loader2, ChevronRight, AlertTriangle,
+  UtensilsCrossed, Loader2, ChevronRight, AlertTriangle, Check,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -41,8 +41,9 @@ const CATEGORY_EMOJI = {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function modCartKey(itemId, variantLabel) {
-  return `${itemId}__${variantLabel}`;
+function modCartKey(itemId, variantLabel, addons = []) {
+  const addonKey = addons.map(a => `${a.label}:${a.price}`).sort().join('|');
+  return `${itemId}__${variantLabel}__${addonKey}`;
 }
 
 function modCartTotal(cart) {
@@ -63,25 +64,21 @@ function ModCartRow({ entry, cartKey, onUpdateQty }) {
           <p className="text-white text-sm font-semibold">{entry.itemName}</p>
           <p className="text-[#9a9a9a] text-xs">{entry.variantLabel}</p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="quantity-stepper-compact">
           <button
             type="button"
             onClick={() => onUpdateQty(cartKey, -1)}
-            className="w-7 h-7 rounded-lg bg-[#2e2e2e] border border-[#3a3a3a]
-                       flex items-center justify-center text-[#9a9a9a]
-                       hover:text-white transition-colors active:scale-90"
-          >
-            <Minus size={12} />
+            className="quantity-stepper-button"
+            aria-label="Decrease quantity">
+            <Minus className="quantity-stepper-icon" />
           </button>
-          <span className="text-white text-sm font-bold w-6 text-center">{entry.qty}</span>
+          <div className="quantity-stepper-display">{entry.qty}</div>
           <button
             type="button"
             onClick={() => onUpdateQty(cartKey, +1)}
-            className="w-7 h-7 rounded-lg bg-[#2e2e2e] border border-[#3a3a3a]
-                       flex items-center justify-center text-[#9a9a9a]
-                       hover:text-white transition-colors active:scale-90"
-          >
-            <Plus size={12} />
+            className="quantity-stepper-button"
+            aria-label="Increase quantity">
+            <Plus className="quantity-stepper-icon" />
           </button>
         </div>
         <span className="text-amber-300 text-sm font-bold flex-shrink-0 min-w-[60px] text-right">
@@ -89,7 +86,6 @@ function ModCartRow({ entry, cartKey, onUpdateQty }) {
         </span>
       </div>
       
-      {/* Display add-ons */}
       {entry.addons?.length > 0 && (
         <div className="border-t border-[#2e2e2e] pt-2">
           <p className="text-[#9a9a9a] text-xs mb-1">Add-ons:</p>
@@ -106,14 +102,21 @@ function ModCartRow({ entry, cartKey, onUpdateQty }) {
   );
 }
 
-// ─── Compact menu item tile ────────────────────────────────────────────────────
+// ─── McDonald's-Style Item Customization Modal ─────────────────────────────────
 
-function ModMenuTile({ item, onAdd }) {
-  const [selectedVariant, setSelectedVariant] = useState(item.variants?.[0] ?? null);
+function ItemCustomizationModal({ item, onClose, onAdd }) {
+  // Clean up variant label strings (e.g., removing stray semicolons like "L;")
+  const sanitizedVariants = useMemo(() => {
+    return (item.variants || []).map(v => ({
+      ...v,
+      label: v.label ? v.label.replace(/;/g, "").trim() : v.label
+    }));
+  }, [item.variants]);
+
+  const [selectedVariant, setSelectedVariant] = useState(sanitizedVariants[0] ?? null);
   const [selectedAddons, setSelectedAddons] = useState([]);
+  const [qty, setQty] = useState(1);
   const [imgErr, setImgErr] = useState(false);
-
-  if (!item.inStock) return null; // hide out-of-stock in this view
 
   const toggleAddon = (addon) =>
     setSelectedAddons((prev) =>
@@ -123,93 +126,198 @@ function ModMenuTile({ item, onAdd }) {
     );
 
   const addonTotal = selectedAddons.reduce((s, a) => s + a.price, 0);
-  const linePrice = (selectedVariant?.price ?? 0) + addonTotal;
+  const unitPrice = (selectedVariant?.price ?? 0) + addonTotal;
+  const totalPrice = unitPrice * qty;
 
   return (
-    <div className="bg-[#242424] border border-[#2e2e2e] rounded-xl overflow-hidden p-3">
-      <div className="flex gap-3 mb-3">
-        {/* Thumbnail */}
-        <div className="w-16 h-16 rounded-lg bg-[#1e1e1e] overflow-hidden flex-shrink-0">
-          {item.imageUrl && !imgErr ? (
-            <img
-              src={item.imageUrl}
-              alt={item.name}
-              className="w-full h-full object-cover"
-              onError={() => setImgErr(true)}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <UtensilsCrossed size={20} className="text-[#3a3a3a]" />
+    <div className="fixed inset-0 z-60 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+      <motion.div
+        initial={{ y: "100%", opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: "100%", opacity: 0 }}
+        className="bg-[#1e1e1e] border border-[#2e2e2e] w-full max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+      >
+        {/* Modal Header */}
+        <div className="relative p-4 border-b border-[#2e2e2e] flex items-center justify-between bg-[#181818]">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-[#242424] overflow-hidden flex-shrink-0">
+              {item.imageUrl && !imgErr ? (
+                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" onError={() => setImgErr(true)} />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center"><UtensilsCrossed size={20} className="text-[#444]" /></div>
+              )}
             </div>
-          )}
+            <div>
+              <h3 className="text-white font-bold text-base leading-tight">{item.name}</h3>
+              <p className="text-[#9a9a9a] text-xs mt-0.5 line-clamp-1">{item.description || item.category}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="p-2 text-[#9a9a9a] hover:text-white rounded-full bg-[#242424]">
+            <X size={18} />
+          </button>
         </div>
 
-        {/* Details */}
-        <div className="flex-1 min-w-0">
-          <p className="text-white text-sm font-semibold leading-tight">{item.name}</p>
+        {/* Modal Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Variants Section */}
+          {sanitizedVariants.length > 0 && (
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-white text-xs font-bold uppercase tracking-wider">Choose Variant / Size</h4>
+                <span className="text-amber-300 text-xs">Required</span>
+              </div>
+              <div className="space-y-2">
+                {sanitizedVariants.map((v) => {
+                  const isSelected = selectedVariant?.label === v.label;
+                  return (
+                    <button
+                      key={v.label}
+                      type="button"
+                      onClick={() => setSelectedVariant(v)}
+                      className={`w-full flex items-center justify-between p-3.5 rounded-xl border text-left transition-all
+                        ${isSelected ? "bg-amber-300/10 border-amber-300 text-white shadow-sm" : "bg-[#242424] border-[#2e2e2e] text-[#ccc] hover:border-[#444]"}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors
+                          ${isSelected ? "border-amber-300 bg-amber-300" : "border-[#555] bg-transparent"}`}>
+                          {isSelected && <Check size={12} className="text-[#1a1a1a] stroke-[3]" />}
+                        </div>
+                        <span className="text-sm font-medium">{v.label}</span>
+                      </div>
+                      <span className="text-amber-300 font-bold text-sm">₹{v.price}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-          {/* Variant chips — compact */}
-          {item.variants?.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {item.variants.map((v) => (
+          {/* Add-ons Section */}
+          {item.addons?.length > 0 && (
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-white text-xs font-bold uppercase tracking-wider">Add-ons & Extras</h4>
+                <span className="text-[#888] text-xs">Optional</span>
+              </div>
+              <div className="space-y-2">
+                {item.addons.map((addon) => {
+                  const active = selectedAddons.some((s) => s.label === addon.label);
+                  return (
+                    <button
+                      key={addon.label}
+                      type="button"
+                      onClick={() => toggleAddon(addon)}
+                      className={`w-full flex items-center justify-between p-3.5 rounded-xl border text-left transition-all
+                        ${active ? "bg-amber-300/10 border-amber-300 text-white" : "bg-[#242424] border-[#2e2e2e] text-[#ccc] hover:border-[#444]"}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors
+                          ${active ? "border-amber-300 bg-amber-300" : "border-[#555] bg-transparent"}`}>
+                          {active && <Check size={12} className="text-[#1a1a1a] stroke-[3]" />}
+                        </div>
+                        <span className="text-sm font-medium">{addon.label}</span>
+                      </div>
+                      <span className="text-amber-300 text-sm font-semibold">+₹{addon.price}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Quantity Stepper */}
+          <div>
+            <h4 className="text-white text-xs font-bold uppercase tracking-wider mb-3">Quantity</h4>
+            <div className="flex items-center justify-between bg-[#242424] border border-[#2e2e2e] rounded-xl p-3">
+              <span className="text-sm text-[#ccc]">Select Quantity</span>
+              <div className="flex items-center gap-3 bg-[#1e1e1e] border border-[#3a3a3a] rounded-lg p-1">
                 <button
-                  key={v.label}
                   type="button"
-                  onClick={() => setSelectedVariant(v)}
-                  className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border transition-colors
-                    ${selectedVariant?.label === v.label
-                      ? "bg-amber-300 text-black border-amber-300"
-                      : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-amber-300/40"}`}
+                  onClick={() => setQty(q => Math.max(1, q - 1))}
+                  className="w-7 h-7 flex items-center justify-center text-[#aaa] hover:text-white rounded transition-colors"
                 >
-                  {v.label} ₹{v.price}
+                  <Minus size={16} />
                 </button>
-              ))}
+                <span className="text-white text-sm font-bold w-6 text-center">{qty}</span>
+                <button
+                  type="button"
+                  onClick={() => setQty(q => q + 1)}
+                  className="w-7 h-7 flex items-center justify-center text-[#aaa] hover:text-white rounded transition-colors"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Price and Add button */}
-        <div className="flex flex-col items-end justify-between flex-shrink-0">
-          <span className="text-amber-300 text-sm font-bold">₹{linePrice}</span>
+        {/* Modal Footer */}
+        <div className="p-4 border-t border-[#2e2e2e] bg-[#181818] flex items-center justify-between gap-4">
+          <div>
+            <span className="text-[#9a9a9a] text-xs block">Total Price</span>
+            <span className="text-amber-300 font-bold text-lg">₹{totalPrice}</span>
+          </div>
           <button
             type="button"
             onClick={() => {
               if (!selectedVariant) return;
-              onAdd({ item, variant: selectedVariant, price: linePrice, addons: selectedAddons });
+              onAdd({ item, variant: selectedVariant, price: unitPrice, addons: selectedAddons, qty });
+              onClose();
             }}
-            className="flex items-center gap-1 bg-amber-300 hover:bg-amber-400
-                       text-black text-xs font-bold px-3 py-1.5 rounded-lg
-                       transition-colors active:scale-95 mt-1"
+            className="flex-1 bg-amber-400 hover:bg-amber-300 text-[#1a1a1a] font-bold py-3.5 px-6 rounded-xl text-sm transition-colors shadow-md flex items-center justify-center gap-2"
           >
-            <Plus size={11} /> Add
+            <span>Add to Order</span>
+            <ChevronRight size={16} />
           </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── McDonald's-Style Compact Menu Tile ────────────────────────────────────────
+
+function ModMenuTile({ item, onSelect }) {
+  const [imgErr, setImgErr] = useState(false);
+  if (!item.inStock) return null;
+
+  const basePrice = item.variants?.[0]?.price ?? 0;
+
+  return (
+    <div
+      onClick={() => onSelect(item)}
+      className="bg-[#242424] border border-[#2e2e2e] rounded-xl overflow-hidden p-3.5 flex items-center justify-between gap-4 cursor-pointer hover:border-amber-300/40 transition-all active:scale-[0.99]"
+    >
+      <div className="flex items-center gap-3.5 min-w-0">
+        <div className="w-16 h-16 rounded-xl bg-[#1e1e1e] overflow-hidden flex-shrink-0">
+          {item.imageUrl && !imgErr ? (
+            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" onError={() => setImgErr(true)} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center"><UtensilsCrossed size={20} className="text-[#3a3a3a]" /></div>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="text-white text-sm font-semibold truncate">{item.name}</p>
+          <p className="text-[#9a9a9a] text-xs truncate mt-0.5 max-w-[200px]">
+            {item.description || item.category}
+          </p>
+          <p className="text-amber-300 text-xs font-bold mt-1">₹{basePrice}{item.variants?.length > 1 ? "+" : ""}</p>
         </div>
       </div>
 
-      {/* Add-ons section */}
-      {item.addons?.length > 0 && (
-        <div className="border-t border-[#2e2e2e] pt-3">
-          <p className="text-[#9a9a9a] text-xs mb-2">Add-ons</p>
-          <div className="flex flex-wrap gap-1.5">
-            {item.addons.map((addon) => {
-              const active = selectedAddons.some((s) => s.label === addon.label);
-              return (
-                <button
-                  key={addon.label}
-                  type="button"
-                  onClick={() => toggleAddon(addon)}
-                  className={`px-2 py-1 rounded-lg text-[10px] font-semibold border transition-colors
-                    ${active
-                      ? "bg-amber-300/20 text-amber-300 border-amber-300/50"
-                      : "bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-amber-300/30"}`}
-                >
-                  +{addon.label} (₹{addon.price})
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <div className="flex-shrink-0">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(item);
+          }}
+          className="bg-amber-400 hover:bg-amber-300 text-[#1a1a1a] font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1 transition-colors shadow-sm"
+        >
+          <Plus size={14} className="stroke-[3]" />
+          <span>Add</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -217,14 +325,14 @@ function ModMenuTile({ item, onAdd }) {
 // ─── Main OrderModificationSheet ──────────────────────────────────────────────
 
 export default function OrderModificationSheet({ order, menuItems, onClose }) {
-  const [modCart, setModCart]   = useState({}); // key → {itemId, itemName, variantLabel, price, qty}
+  const [modCart, setModCart]   = useState({});
   const [note, setNote]         = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess]   = useState(false);
   const [error, setError]       = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCustomizeItem, setActiveCustomizeItem] = useState(null);
 
-  // Derive unique categories from the menu
   const categories = useMemo(() => {
     const seen = new Set();
     const cats = [];
@@ -243,20 +351,19 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
     ),
   [menuItems, activeCategory]);
 
-  // Cart helpers
-  const handleAdd = ({ item, variant, price, addons = [] }) => {
-    const key = modCartKey(item.id, variant.label);
+  const handleAddCustomizedItem = ({ item, variant, price, addons = [], qty = 1 }) => {
+    const key = modCartKey(item.id, variant.label, addons);
     setModCart((prev) => ({
       ...prev,
       [key]: prev[key]
-        ? { ...prev[key], qty: prev[key].qty + 1 }
+        ? { ...prev[key], qty: prev[key].qty + qty }
         : {
             itemId: item.id,
             itemName: item.name,
             variantLabel: variant.label,
             price,
-            qty: 1,
-            addons: addons || [], // Preserve add-ons
+            qty,
+            addons: addons || [],
           },
     }));
   };
@@ -277,9 +384,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
   const cartEntries = Object.entries(modCart);
   const addedTotal  = modCartTotal(modCart);
   const addedCount  = modCartCount(modCart);
-
-  // `order.totalPrice` is already the live running total (Firestore incremented it).
-  // We only add `addedTotal` from the current in-progress mod cart — nothing else.
   const newRunningTotal = (order.totalPrice ?? 0) + addedTotal;
 
   const handleConfirm = async () => {
@@ -295,13 +399,11 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
           variantLabel: e.variantLabel,
           price:        e.price,
           qty:          e.qty,
-          addons:       e.addons || [], // Include add-ons in the payload
-          status:       "Pending", // Individual item status
+          addons:       e.addons || [],
+          status:       "Pending",
           addedAt:      new Date(),
         })),
         addedPrice: addedTotal,
-        // ISO string — serverTimestamp() cannot be used inside arrayUnion payloads
-        // because Firestore cannot resolve server-side sentinels inside array diffs
         addedAt:    new Date().toISOString(),
         note:       note.trim() || null,
       };
@@ -329,7 +431,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
 
   return (
     <>
-      {/* Backdrop */}
       <motion.div
         key="mod-backdrop"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -337,7 +438,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
         className="fixed inset-0 bg-black/75 z-50 backdrop-blur-sm"
       />
 
-      {/* Sheet */}
       <motion.div
         key="mod-sheet"
         initial={{ y: "100%", opacity: 0.9 }}
@@ -348,12 +448,10 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
                    bg-[#1e1e1e] border-t border-[#2e2e2e] rounded-t-3xl
                    max-h-[92vh] overflow-hidden"
       >
-        {/* Handle */}
         <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
           <div className="w-10 h-1 rounded-full bg-[#3a3a3a]" />
         </div>
 
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#2e2e2e] flex-shrink-0">
           <div>
             <h2 className="text-white font-bold text-base flex items-center gap-2">
@@ -376,7 +474,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
           </button>
         </div>
 
-        {/* Non-modifiable guard */}
         {!isModifiable && (
           <div className="px-5 py-4 flex items-center gap-3 bg-red-500/10 border-b border-red-500/20">
             <AlertTriangle size={16} className="text-red-400 flex-shrink-0" />
@@ -386,7 +483,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
           </div>
         )}
 
-        {/* Success state */}
         {success ? (
           <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 text-center">
             <motion.div
@@ -409,10 +505,7 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
           </div>
         ) : (
           <>
-            {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto">
-
-              {/* Mod cart summary — sticky inside scroll */}
               {cartEntries.length > 0 && (
                 <div className="sticky top-0 z-10 bg-[#1e1e1e] border-b border-[#f5a623]/20 px-4 py-3">
                   <p className="text-[#f5a623] text-xs font-bold uppercase tracking-wider mb-2">
@@ -428,7 +521,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
                       />
                     ))}
                   </div>
-                  {/* Note field */}
                   <input
                     type="text"
                     value={note}
@@ -442,27 +534,28 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
                 </div>
               )}
 
-              {/* Category filter */}
               <div className="overflow-x-auto scrollbar-hide border-b border-[#2e2e2e]">
-                <div className="flex gap-1 px-4 py-2.5 w-max">
+                <div className="flex gap-2 px-4 py-3 w-max">
                   {categories.map((cat) => (
                     <button
                       key={cat}
                       type="button"
                       onClick={() => setActiveCategory(cat)}
-                      className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg
-                                  text-xs font-semibold transition-colors whitespace-nowrap
+                      className={`flex-shrink-0 flex items-center justify-center px-4 py-2.5 rounded-xl
+                                  text-xs font-semibold transition-all duration-200 whitespace-nowrap
+                                  min-h-[40px] min-w-fit border
                                   ${activeCategory === cat
-                                    ? "bg-[#f5a623] text-[#1a1a1a]"
-                                    : "text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e]"}`}
+                                    ? "bg-[#f5a623] text-[#1a1a1a] border-[#f5a623] shadow-sm scale-105"
+                                    : "text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] border-[#3a3a3a] hover:border-[#f5a623]/50"}`}
                     >
-                      {cat !== "All" && (CATEGORY_EMOJI[cat] ?? "🍽️")} {cat}
+                      <span className="truncate max-w-[120px]">
+                        {cat !== "All" && (CATEGORY_EMOJI[cat] ?? "🍽️")} {cat}
+                      </span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Menu tiles */}
               <div className="px-4 py-4 space-y-2.5">
                 {visibleItems.length === 0 ? (
                   <p className="text-[#9a9a9a] text-sm text-center py-8">
@@ -470,16 +563,14 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
                   </p>
                 ) : (
                   visibleItems.map((item) => (
-                    <ModMenuTile key={item.id} item={item} onAdd={handleAdd} />
+                    <ModMenuTile key={item.id} item={item} onSelect={setActiveCustomizeItem} />
                   ))
                 )}
               </div>
 
-              {/* Safe-area spacer */}
               <div className="h-32" />
             </div>
 
-            {/* ── Footer CTA — fixed at bottom ── */}
             <div className="flex-shrink-0 border-t border-[#2e2e2e] px-4 pt-3 pb-safe bg-[#1e1e1e]"
                  style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom, 20px))" }}>
               {error && (
@@ -528,6 +619,17 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
           </>
         )}
       </motion.div>
+
+      {/* Pop-up Customization Modal */}
+      <AnimatePresence>
+        {activeCustomizeItem && (
+          <ItemCustomizationModal
+            item={activeCustomizeItem}
+            onClose={() => setActiveCustomizeItem(null)}
+            onAdd={handleAddCustomizedItem}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }
