@@ -446,59 +446,7 @@ function MenuItemCard({ item, onEdit, onDelete, onToggleVariantStock, onToggleSp
   );
 }
 
-function ItemStatusRow({ item, onStatusChange, isUpdating }) {
-  const currentStatusIndex = ITEM_STATUSES.indexOf(item.status || "Pending");
-  const nextStatus = ITEM_STATUSES[currentStatusIndex + 1];
-  const statusMeta = STATUS_META[item.status || "Pending"];
 
-  return (
-    <div className="py-2 px-3 bg-white rounded-lg border border-gray-100">
-      <div className="flex items-center justify-between">
-        <div className="flex-1 min-w-0">
-          <div>
-            <span className="text-sm font-medium text-gray-900">
-              {item.qty}× {item.itemName}
-            </span>
-            {item.variantLabel && (
-              <span className="text-xs text-gray-500 ml-1">({item.variantLabel})</span>
-            )}
-          </div>
-          
-          {/* COMPACT ADD-ONS SUB-TEXT */}
-          {item.addons?.length > 0 && (
-            <div className="mt-1">
-              <span className="text-orange-600 font-bold text-sm">
-                + {item.addons.map(addon => addon.label).join(' & ').toUpperCase()}
-              </span>
-              <span className="text-orange-500 text-xs ml-2">
-                (+₹{item.addons.reduce((sum, addon) => sum + addon.price, 0)})
-              </span>
-            </div>
-          )}
-          
-          <div className="flex items-center gap-2 mt-1">
-            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusMeta.color}`}>
-              {statusMeta.icon} {item.status || "Pending"}
-            </span>
-            <span className="text-xs text-gray-500">₹{item.price * item.qty}</span>
-          </div>
-        </div>
-        {nextStatus && (
-          <button
-            type="button"
-            onClick={() => onStatusChange(nextStatus)}
-            disabled={isUpdating}
-            className="flex items-center gap-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-60
-                       text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-          >
-            {isUpdating ? <Loader2 size={10} className="animate-spin" /> : <ChevronRight size={10} />}
-            {nextStatus}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ─── PROFESSIONAL KITCHEN DISPLAY SYSTEM (KDS) ORDER CARD ──────────────────────
 function OrderCard({ order, onStatusChange, onItemStatusChange, isUpdating }) {
