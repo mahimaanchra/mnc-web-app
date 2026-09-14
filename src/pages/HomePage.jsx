@@ -137,13 +137,14 @@ export default function HomePage() {
   };
 
   const goTakeaway = () => {
-    localStorage.removeItem("tableNumber");
-    localStorage.setItem("orderMode", "takeaway");
+    SessionManager.setTableNumber(null);
+    SessionManager.setOrderMode("takeaway");
     navigate("/menu?mode=takeaway");
   };
 
   const goSpecials = () => {
-    const savedTable = localStorage.getItem("tableNumber");
+    const sessionState = SessionManager.getSessionState();
+    const savedTable = sessionState.tableNumber;
     if (!savedTable && !hasTable) {
       setIsSpecialIntent(true);
       setShowSelector(true);

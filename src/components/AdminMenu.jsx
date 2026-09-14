@@ -13,7 +13,7 @@ import {
   Loader2, PackageX, UtensilsCrossed, ArrowLeft,
   LogOut, ClipboardList, LayoutGrid, Clock,
   CheckCircle2, ChefHat, CircleDollarSign, Volume2, Sparkles, Archive,
-  Upload, ChevronRight
+  Upload
 } from "lucide-react";
 
 // Image compression utilities
@@ -63,8 +63,8 @@ const validateImageSize = (base64String, maxSizeKB = 800) => {
 
 const CATEGORIES = [
   "MNC Cold Coffee", "MNC Shakes", "MNC Sandwiches", "Mocktails", "Iced Tea", 
-  "Hot Beverages", "Burger", "Vada Pav", "Pizza", "Maggi", 
-  "Fries and Munchies", "Chinese", "Dumplings", "Healthy Food", "Combos",
+  "Hot Beverages", "Burger", "Vada Pav", "Pizza", "Single Topping Pizza", "Maggi", 
+  "Fries & Munchies", "Chinese", "Dumplings", "Healthy Food", "Combos",
   "Pasta", "Bread", "Wrap", "Dessert"
 ];
 
@@ -85,8 +85,6 @@ const EMPTY_FORM = {
   inStock: true,
   isMncSpecial: false,
 };
-
-const ITEM_STATUSES = ["Pending", "Preparing", "Ready"];
 
 const STATUS_META = {
   // Master Order Statuses
@@ -765,7 +763,7 @@ export default function AdminMenu() {
     if (!validate()) return;
     setSaving(true);
     try {
-      // imageUrl now contains either a URL string or Base64 data - both work directly
+      // Preserve existing imageUrl during save - don't let it clear
       const data = sanitizeItem(form);
       
       if (editingId) {
@@ -928,7 +926,16 @@ export default function AdminMenu() {
     setErrors({});
     setImgError(false);
     setShowForm(true);
-    clearImageSelection(); // Clear any previous file selection
+    // Set preview URL if editing an item with an existing image
+    if (item.imageUrl) {
+      setPreviewUrl(item.imageUrl);
+    } else {
+      setPreviewUrl(null);
+    }
+    // Only clear file input, not the imageUrl state
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const resetForm = () => {

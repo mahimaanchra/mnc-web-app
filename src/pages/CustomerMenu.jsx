@@ -8,7 +8,7 @@ import { db } from "../firebase/config";
 import { useLocation, Link } from "react-router-dom";
 import {
    ShoppingCart, Plus, Minus, X, UtensilsCrossed,
-  PackageX, ArrowLeft, CheckCircle2, ChevronRight,
+  PackageX, ArrowLeft, CheckCircle2, ChevronRight, ChevronDown,
   Phone, Loader2, TableProperties, Gift,
   ClipboardList, PlusCircle, ShoppingBag,
 } from "lucide-react";
@@ -45,18 +45,9 @@ function getOrderedCategories(items) {
   }, []);
 }
 
-// Clean variant labels to prevent stray characters
-function cleanVariantLabel(label) {
-  if (!label) return label;
-  // Remove common stray characters and normalize
-  return label
-    .replace(/;/g, '') // Remove semicolons
-    .replace(/[^\w\s\-.()/]/g, '') // Remove special chars except common ones
-    .trim();
-}
-
+// Use original variant label for cart key to prevent mismatches
 function cartKey(itemId, variantLabel) { 
-  return `${itemId}__${cleanVariantLabel(variantLabel) || variantLabel}`; 
+  return `${itemId}__${variantLabel || 'default'}`; 
 }
 function cartTotal(cart) {
   return Object.values(cart).reduce((s, e) => s + e.price * e.qty, 0);
@@ -427,11 +418,12 @@ function ItemCustomizationModal({ item, onAddToCart, onClose }) {
   const [quantity, setQuantity] = useState(1);
   const [imgErr, setImgErr] = useState(false);
 
-  // Initialize with first available variant
+  // Initialize with first available variant and ensure consistent state
   useEffect(() => {
     if (item.variants?.length > 0) {
       const firstAvailable = item.variants.find(v => v.inStock !== false);
-      setSelectedVariant(firstAvailable || item.variants[0]);
+      const variantToSelect = firstAvailable || item.variants[0];
+      setSelectedVariant(variantToSelect);
     } else {
       // For items without variants, create a default variant
       setSelectedVariant({ label: 'Regular', price: item.price || 0 });
@@ -526,8 +518,8 @@ function ItemCustomizationModal({ item, onAddToCart, onClose }) {
                   {item.category}
                 </span>
               </div>
-              <button onClick={onClose} className="btn-sm btn-outline ml-3 w-8 h-8 p-0 min-w-0 bg-black/40 backdrop-blur-sm">
-                <X size={16} />
+              <button onClick={onClose} className="ml-3 w-10 h-10 rounded-full bg-black text-white flex items-center justify-center hover:bg-gray-800 transition-colors shadow-lg">
+                <X size={18} />
               </button>
             </div>
             
@@ -566,7 +558,7 @@ function ItemCustomizationModal({ item, onAddToCart, onClose }) {
                           {isSelected && <div className="radio-dot" />}
                         </div>
                         <div className="text-left">
-                          <p className="font-semibold">{cleanVariantLabel(variant.label) || variant.label}</p>
+                          <p className="font-semibold">{variant.label}</p>
                           {!isInStock && <p className="text-xs text-red-400">Out of stock</p>}
                         </div>
                       </div>
@@ -607,7 +599,7 @@ function ItemCustomizationModal({ item, onAddToCart, onClose }) {
                           {isSelected && <div className="radio-dot" />}
                         </div>
                         <div className="text-left">
-                          <p className="font-semibold">{cleanVariantLabel(upgrade.label) || upgrade.label}</p>
+                          <p className="font-semibold">{upgrade.label}</p>
                           <p className="text-xs text-[#9a9a9a]">
                             Includes sides & drink
                           </p>
@@ -879,14 +871,14 @@ function CheckoutModal({
   prefilledPhone,   // already verified via PhoneGateModal — skips the phone step
   items = [],       // menu items for stock validation
 }) {
-  // Get session state safely from SessionManager or localStorage
+  // Get session state safely from SessionManager with fallback
   const sessionState = SessionManager.getSession ? SessionManager.getSession() : {
     orderMode: localStorage.getItem("orderMode"),
     tableNumber: localStorage.getItem("tableNo"),
     verifiedPhone: localStorage.getItem("verifiedPhone")
   };
 
-  // Determine the saved order mode from localStorage with session awareness
+  // Use SessionManager for consistent state management
   const { orderMode: savedMode } = sessionState;
 
   // Step flow:
@@ -1040,15 +1032,15 @@ function CheckoutModal({
         await recordOrder(verifiedPhone);
       }
 
-      // Only save mode/table if not a special order
+      // Only save mode/table if not a special order - use SessionManager
       if (!isSpecialFilter) {
         if (finalOrderMode === "dine-in" && localTable) {
-          localStorage.setItem("tableNumber", localTable);
+          SessionManager.setTableNumber(localTable);
         } else if (finalOrderMode === "takeaway") {
           // Takeaway: wipe any stale table so next dine-in starts fresh
-          localStorage.removeItem("tableNumber");
+          SessionManager.setTableNumber(null);
         }
-        localStorage.setItem("orderMode", finalOrderMode);
+        SessionManager.setOrderMode(finalOrderMode);
       }
 
       setStep("success");
@@ -1519,67 +1511,64 @@ function MncSpecialsUpsell({ items, onAddToCart, currentCart }) {
   if (mncSpecials.length === 0) return null;
 
   return (
-    <div className="mb-6">
-      <h3 className="text-white font-bold text-lg mb-3 flex items-center gap-2">
-        <Gift className="text-amber-300" size={20} />
+    <div className="border-t border-[#2e2e2e] pt-4">
+      <h3 className="text-white font-semibold text-base mb-3 flex items-center gap-2">
+        <Gift className="text-amber-300" size={16} />
         Complete Your Meal With
       </h3>
       
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
         {mncSpecials.slice(0, 5).map(item => { // Show max 5 recommendations
           const defaultVariant = item.variants?.find(v => v.inStock !== false) || item.variants?.[0];
-          // eslint-disable-next-line no-unused-vars
-          const price = defaultVariant?.price || 0;
           
           return (
-            <div key={item.id} className="flex-shrink-0 w-48 bg-[#1a1a1a] border border-[#2e2e2e] rounded-xl p-3">
+            <div key={item.id} className="flex-shrink-0 w-40 bg-[#1a1a1a] border border-[#2e2e2e] rounded-2xl p-3">
               {/* Item Image */}
-              <div className="relative h-24 bg-[#2e2e2e] rounded-lg mb-2 overflow-hidden">
+              <div className="relative h-20 bg-[#2e2e2e] rounded-xl mb-2 overflow-hidden">
                 {item.imageUrl ? (
                   <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <UtensilsCrossed size={20} className="text-[#3a3a3a]" />
+                    <UtensilsCrossed size={16} className="text-[#3a3a3a]" />
                   </div>
                 )}
                 <div className="absolute top-1 right-1">
-                  <span className="bg-amber-300 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    MNC Special
+                  <span className="bg-amber-300 text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                    MNC
                   </span>
                 </div>
               </div>
               
               {/* Item Details */}
-              <div className="space-y-2">
-                <h4 className="text-white font-semibold text-sm leading-tight line-clamp-1">
+              <div className="space-y-1.5">
+                <h4 className="text-white font-medium text-sm leading-tight truncate">
                   {item.name}
                 </h4>
                 
-                {defaultVariant && (
-                  <p className="text-[#9a9a9a] text-xs">
-                    {defaultVariant.label} • ₹{defaultVariant.price}
-                  </p>
-                )}
-                
-                <button
-                  onClick={() => {
-                    if (defaultVariant) {
-                      onAddToCart({
-                        itemId: item.id,
-                        itemName: item.name,
-                        variantLabel: defaultVariant.label,
-                        price: defaultVariant.price,
-                        addons: [],
-                      });
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-1 
-                             bg-amber-300 hover:bg-amber-400 text-black
-                             font-bold text-xs py-2 rounded-lg transition-colors"
-                >
-                  <Plus size={12} />
-                  Add
-                </button>
+                <div className="flex items-center justify-between">
+                  <span className="text-amber-300 font-bold text-sm">
+                    ₹{defaultVariant?.price || 0}
+                  </span>
+                  <button
+                    onClick={() => {
+                      if (defaultVariant) {
+                        onAddToCart({
+                          itemId: item.id,
+                          itemName: item.name,
+                          variantLabel: defaultVariant.label,
+                          price: defaultVariant.price,
+                          addons: [],
+                        });
+                      }
+                    }}
+                    className="flex items-center justify-center gap-1 
+                               bg-amber-300 hover:bg-amber-400 text-black
+                               font-semibold text-xs py-1.5 px-3 rounded-full transition-colors"
+                  >
+                    <Plus size={12} />
+                    Add
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -1592,8 +1581,15 @@ function MncSpecialsUpsell({ items, onAddToCart, currentCart }) {
 // ─── Full Screen Cart ──────────────────────────────────────────────────────────
 
 function FullScreenCart({ cart, onUpdateQty, onClose, onCheckout, onAddToCart, items }) {
+  const [showChargesDetail, setShowChargesDetail] = useState(false);
   const entries = Object.entries(cart);
   const total = cartTotal(cart);
+  const subtotal = total;
+  const serviceFee = 0;
+  const totalPayable = subtotal + serviceFee;
+
+  // Get item details for thumbnails
+  const getItemDetails = (itemId) => items.find(item => item.id === itemId) || {};
 
   return (
     <motion.div
@@ -1624,108 +1620,176 @@ function FullScreenCart({ cart, onUpdateQty, onClose, onCheckout, onAddToCart, i
             <p className="text-[#9a9a9a] text-sm">Browse our menu to add items</p>
           </div>
         ) : (
-          <div className="max-w-md mx-auto space-y-4">
-            {entries.map(([key, entry]) => (
-              <div key={key} className="bg-[#242424] border border-[#2e2e2e] rounded-2xl p-4">
-                <div className="flex items-start gap-4">
+          <div className="max-w-md mx-auto space-y-3">
+            {entries.map(([key, entry]) => {
+              const itemDetails = getItemDetails(entry.itemId);
+              const hasImage = itemDetails.imageUrl && !entry.isFreeStreak;
+              
+              return (
+                <div key={key} className="bg-[#242424] border border-[#2e2e2e] rounded-3xl p-4 flex items-center gap-4">
+                  {/* Product Thumbnail */}
+                  <div className="w-16 h-16 rounded-2xl bg-[#1a1a1a] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {hasImage ? (
+                      <img 
+                        src={itemDetails.imageUrl} 
+                        alt={entry.itemName}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { 
+                          e.target.style.display = 'none';
+                          e.target.parentNode.innerHTML = '<div class="text-[#555] text-lg">🍽️</div>';
+                        }}
+                      />
+                    ) : (
+                      <div className="text-[#555] text-lg">
+                        {entry.isFreeStreak ? '🎁' : '🍽️'}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Item Details */}
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-white font-semibold text-base mb-1">{entry.itemName}</h3>
+                    <h3 className="text-white font-semibold text-base mb-1 leading-tight">
+                      {entry.itemName}
+                    </h3>
                     
-                    {/* Variant Details */}
+                    {/* Dietary Badge & Variant */}
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="bg-amber-300/10 text-amber-300 text-xs font-medium px-2 py-1 rounded-lg">
+                      <span className="bg-amber-300/15 text-amber-300 text-xs font-medium px-2.5 py-1 rounded-full border border-amber-300/20">
                         {entry.variantLabel}
                       </span>
+                      {itemDetails.category && (
+                        <span className="bg-[#1a1a1a] text-[#888] text-xs px-2 py-1 rounded-full">
+                          {itemDetails.category}
+                        </span>
+                      )}
                     </div>
                     
-                    {/* Selected Add-ons */}
+                    {/* Price */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-white font-semibold">
+                        {entry.isFreeStreak ? 'FREE' : `₹${entry.price}`}
+                      </span>
+                      {entry.qty > 1 && !entry.isFreeStreak && (
+                        <span className="text-[#9a9a9a] text-sm">each</span>
+                      )}
+                    </div>
+                    
+                    {/* Selected Add-ons (compact) */}
                     {entry.addons?.length > 0 && (
-                      <div className="mb-3">
-                        <p className="text-[#9a9a9a] text-xs font-medium mb-1">Add-ons:</p>
+                      <div className="mt-2">
                         <div className="flex flex-wrap gap-1">
                           {entry.addons.map((addon, idx) => (
-                            <span key={idx} className="bg-[#1a1a1a] text-[#9a9a9a] text-xs px-2 py-1 rounded-lg border border-[#3a3a3a]">
-                              +{addon.label} (₹{addon.price})
+                            <span key={idx} className="text-[#9a9a9a] text-xs">
+                              +{addon.label}
+                              {idx < entry.addons.length - 1 && ', '}
                             </span>
                           ))}
                         </div>
                       </div>
                     )}
-                    
-                    {/* Price per unit */}
-                    <p className="text-[#9a9a9a] text-sm">₹{entry.price} each</p>
                   </div>
                   
-                  {/* Quantity Controls */}
+                  {/* Quantity Controls & Total */}
                   <div className="flex flex-col items-end gap-3 flex-shrink-0">
-                    <div className="quantity-stepper-compact">
+                    {/* Quantity Stepper - Clean Pills */}
+                    <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-full p-1">
                       <button
                         onClick={() => onUpdateQty(key, -1)}
-                        className="quantity-stepper-button"
+                        className="w-8 h-8 rounded-full bg-[#2a2a2a] hover:bg-amber-300 hover:text-black text-[#9a9a9a] flex items-center justify-center transition-colors"
                         aria-label="Decrease quantity"
                       >
-                        <Minus className="quantity-stepper-icon" />
+                        <Minus size={14} />
                       </button>
-                      <div className="quantity-stepper-display">{entry.qty}</div>
+                      <div className="px-3 py-1 text-white font-medium min-w-[2rem] text-center text-sm">
+                        {entry.qty}
+                      </div>
                       <button
                         onClick={() => onUpdateQty(key, +1)}
-                        className="quantity-stepper-button"
+                        className="w-8 h-8 rounded-full bg-amber-300 hover:bg-amber-400 text-black flex items-center justify-center transition-colors"
                         aria-label="Increase quantity"
                       >
-                        <Plus className="quantity-stepper-icon" />
+                        <Plus size={14} />
                       </button>
                     </div>
                     
                     {/* Total price for this item */}
                     <span className="text-amber-300 font-bold text-lg">
-                      ₹{entry.price * entry.qty}
+                      {entry.isFreeStreak ? 'FREE' : `₹${entry.price * entry.qty}`}
                     </span>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Bill Summary & Checkout */}
+      {/* Summary Panel & Checkout */}
       {entries.length > 0 && (
-        <div className="bg-[#242424] border-t border-[#2e2e2e] px-4 py-6 space-y-6">
-          <div className="max-w-md mx-auto">
-            {/* MNC Specials Upsell Section */}
-            <MncSpecialsUpsell items={items} onAddToCart={onAddToCart} currentCart={cart} />
+        <div className="bg-[#242424] border-t border-[#2e2e2e] px-4 py-6">
+          <div className="max-w-md mx-auto space-y-4">
             
-            {/* Bill Summary */}
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#9a9a9a]">Subtotal ({cartCount(cart)} items)</span>
-                  <span className="text-white font-medium">₹{total}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#9a9a9a]">Service Fee</span>
-                  <span className="text-white font-medium">₹0</span>
-                </div>
-                <div className="border-t border-[#2e2e2e] pt-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-white font-semibold text-lg">Total</span>
-                    <span className="text-amber-300 font-bold text-2xl">₹{total}</span>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Checkout Button */}
+            {/* Total Charges (Collapsible) */}
+            <div className="bg-[#1a1a1a] rounded-3xl overflow-hidden">
               <button
-                onClick={onCheckout}
-                className="w-full flex items-center justify-center gap-2
-                           bg-amber-300 hover:bg-amber-400 text-black
-                           font-bold py-4 rounded-2xl transition-colors
-                           shadow-lg shadow-amber-300/20 text-base"
+                onClick={() => setShowChargesDetail(!showChargesDetail)}
+                className="w-full flex items-center justify-between p-4 text-left hover:bg-[#222] transition-colors"
               >
-                <ShoppingBag size={18} />
-                Proceed to Checkout
+                <span className="text-[#9a9a9a] text-sm font-medium">Total Charges</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-white font-semibold">₹{subtotal}</span>
+                  <motion.div
+                    animate={{ rotate: showChargesDetail ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronDown size={16} className="text-[#9a9a9a]" />
+                  </motion.div>
+                </div>
               </button>
+              
+              <AnimatePresence>
+                {showChargesDetail && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="border-t border-[#2e2e2e]"
+                  >
+                    <div className="p-4 pt-3 space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-[#9a9a9a]">Subtotal ({cartCount(cart)} items)</span>
+                        <span className="text-white">₹{subtotal}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-[#9a9a9a]">Service Fee</span>
+                        <span className="text-white">₹{serviceFee}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
+            
+            {/* Total Payable */}
+            <div className="bg-[#1a1a1a] rounded-3xl p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-white font-semibold text-lg">Total Payable</span>
+                <span className="text-amber-300 font-bold text-2xl">₹{totalPayable}</span>
+              </div>
+            </div>
+            
+            {/* Checkout Button */}
+            <button
+              onClick={onCheckout}
+              className="w-full flex items-center justify-center gap-2
+                         bg-amber-300 hover:bg-amber-400 text-black
+                         font-bold py-4 rounded-full transition-colors
+                         shadow-lg shadow-amber-300/20 text-base"
+            >
+              <ShoppingBag size={18} />
+              Proceed to Checkout
+            </button>
           </div>
         </div>
       )}
@@ -1756,12 +1820,12 @@ export default function CustomerMenu() {
     recordOrder,
   } = useLoyalty();
 
-  // ── Single source of truth for the verified phone ──────────────────────────
-  // Initialised from localStorage so returning customers skip the gate immediately.
-  // Updated by PhoneGateModal.onVerified and by CheckoutModal when it saves a phone.
-  const [verifiedPhone, setVerifiedPhone] = useState(
-    () => localStorage.getItem("verifiedPhone") ?? "",
-  );
+  // Single source of truth for verified phone with expiry handling
+  // Initialize from SessionManager for better consistency
+  const [verifiedPhone, setVerifiedPhone] = useState(() => {
+    const sessionState = SessionManager.initialize();
+    return sessionState.verifiedPhone ?? "";
+  });
 
   // Show gate if phone is still empty after mount
   const phoneGateRequired = !verifiedPhone;
@@ -1815,6 +1879,7 @@ export default function CustomerMenu() {
     if (verifiedPhone) fetchProfile(verifiedPhone);
   }, [verifiedPhone, fetchProfile]);
 
+  // Menu state with cache validation
   const [items,          setItems]          = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [activeCategory, setActiveCategory] = useState("All");
@@ -1833,10 +1898,32 @@ export default function CustomerMenu() {
     setActiveOrder(order);
   }, []);
 
+  // Firestore listener with cache validation
   useEffect(() => {
     return onSnapshot(collection(db, "menu_items"), (snap) => {
-      setItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const freshItems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setItems(freshItems);
       setLoading(false);
+      
+      // Validate cart against fresh menu data to remove stale items
+      setCart(prevCart => {
+        const validatedCart = {};
+        Object.entries(prevCart).forEach(([key, cartItem]) => {
+          const menuItem = freshItems.find(item => item.id === cartItem.itemId);
+          if (menuItem) {
+            // Check if variant still exists and is in stock
+            if (cartItem.variantLabel && cartItem.variantLabel !== 'Regular') {
+              const variant = menuItem.variants?.find(v => v.label === cartItem.variantLabel);
+              if (variant && variant.inStock !== false) {
+                validatedCart[key] = cartItem;
+              }
+            } else if (menuItem.inStock) {
+              validatedCart[key] = cartItem;
+            }
+          }
+        });
+        return validatedCart;
+      });
     });
   }, []);
 
@@ -1966,14 +2053,19 @@ export default function CustomerMenu() {
             )}
 
             <button onClick={() => setCartOpen(true)}
-              className="btn-secondary focus-ring relative">
-              <ShoppingCart size={16} className="text-amber-300 flex-shrink-0" />
-              <span className="hidden xs:inline text-responsive-sm">Cart</span>
+              className={`relative flex items-center gap-2 px-3 py-2 rounded-full font-semibold text-sm transition-all duration-200 ${
+                count > 0 
+                  ? 'bg-amber-300 text-black shadow-lg shadow-amber-300/30 animate-pulse hover:bg-amber-400 hover:animate-none' 
+                  : 'bg-[#2e2e2e] text-[#9a9a9a] hover:bg-[#3e3e3e] hover:text-white'
+              }`}>
+              <ShoppingCart size={16} className="flex-shrink-0" />
+              <span className="hidden xs:inline">
+                {count > 0 ? `Cart (${count})` : 'Cart'}
+              </span>
               {count > 0 && (
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-amber-300 text-black
-                                 text-xs font-bold rounded-full flex items-center justify-center">
-                  {count}
-                </span>
+                <div className="xs:hidden absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-bounce">
+                  {count > 9 ? '9+' : count}
+                </div>
               )}
             </button>
           </div>
@@ -2105,30 +2197,12 @@ export default function CustomerMenu() {
             </div>
           </div>
         ))}
-      </main>
 
-      <AnimatePresence>
-        {count > 0 && !cartOpen && !checkoutOpen && (
-          <motion.div
-            initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 80, opacity: 0 }}
-            transition={{ type: "spring", damping: 22, stiffness: 260 }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-amber-300 px-4 py-3"
-            style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom, 12px))" }}>
-            <div className="max-w-md mx-auto flex items-center justify-between">
-              <span className="text-black font-medium">
-                {count} item{count > 1 ? "s" : ""}
-              </span>
-              <button 
-                onClick={() => setCartOpen(true)}
-                className="text-black font-medium flex items-center gap-1 hover:opacity-80 transition-opacity">
-                View Cart
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </motion.div>
+        {/* MNC Specials Recommendation Section - Below all menu items */}
+        {!loading && items.length > 0 && (
+          <MncSpecialsUpsell items={items} onAddToCart={handleAddToCart} currentCart={cart} />
         )}
-      </AnimatePresence>
+      </main>
 
       <AnimatePresence>
         {cartOpen && (
@@ -2176,8 +2250,8 @@ export default function CustomerMenu() {
               
               if (isSpecialFilter) {
                 // Special orders: always clear to ensure fresh experience
-                localStorage.removeItem("orderMode");
-                localStorage.removeItem("tableNumber");
+                SessionManager.setOrderMode(null);
+                SessionManager.setTableNumber(null);
               } else {
                 // Regular orders: clear for now, but this will be managed by OrderTracker
                 // when the order actually completes
@@ -2203,6 +2277,8 @@ export default function CustomerMenu() {
         onOpenChange={setTrackerOpen}
         onAddMore={(order) => { setTrackerOpen(false); setModifyingOrder(order); }}
         onActiveOrderChange={handleActiveOrderChange}
+        onQuickAdd={handleAddToCart}
+        items={items}
         hideFloatingWidget={true}
       />
 

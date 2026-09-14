@@ -42,7 +42,7 @@
   /* Robust button base classes to prevent overlap and ensure proper scaling */
   .btn-base {
     @apply inline-flex items-center justify-center font-semibold transition-all duration-200;
-    @apply border border-transparent rounded-xl;
+    @apply border border-transparent rounded-full;
     @apply min-h-[44px] px-4 py-2.5 gap-2;
     @apply text-sm leading-tight;
     @apply active:scale-95 disabled:cursor-not-allowed disabled:opacity-50;
@@ -296,7 +296,7 @@
   }
 
   .variant-option {
-    @apply w-full flex items-center justify-between p-4 rounded-xl border transition-all duration-200;
+    @apply w-full flex items-center justify-between p-4 rounded-full border transition-all duration-200;
     @apply hover:border-amber-300/50 cursor-pointer;
   }
 
@@ -309,7 +309,7 @@
   }
 
   .addon-option {
-    @apply w-full flex items-center justify-between p-3 rounded-xl border transition-all duration-200;
+    @apply w-full flex items-center justify-between p-3 rounded-full border transition-all duration-200;
     @apply hover:border-amber-300/30 cursor-pointer;
   }
 
@@ -370,7 +370,7 @@
   }
 
   .quantity-stepper-button {
-    @apply w-12 h-12 sm:w-14 sm:h-14 rounded-xl border-2 border-[#3a3a3a];
+    @apply w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-[#3a3a3a];
     @apply bg-[#2e2e2e] hover:bg-[#3a3a3a] active:bg-[#4a4a4a];
     @apply flex items-center justify-center transition-all duration-200;
     @apply text-white hover:text-amber-300 active:scale-95;
@@ -386,7 +386,7 @@
 
   .quantity-stepper-display {
     @apply text-white font-bold text-2xl sm:text-3xl min-w-[4rem] text-center;
-    @apply bg-[#242424] border border-[#3a3a3a] rounded-xl px-4 py-3 sm:px-6 sm:py-4;
+    @apply bg-[#242424] border border-[#3a3a3a] rounded-full px-4 py-3 sm:px-6 sm:py-4;
     @apply shadow-inner;
   }
 
@@ -400,7 +400,7 @@
   }
 
   .quantity-stepper-compact .quantity-stepper-button {
-    @apply w-8 h-8 rounded-lg;
+    @apply w-8 h-8 rounded-full;
   }
 
   .quantity-stepper-compact .quantity-stepper-display {
