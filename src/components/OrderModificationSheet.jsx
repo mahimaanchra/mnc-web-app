@@ -33,8 +33,8 @@ import {
 const CATEGORY_EMOJI = {
   "Cold Coffee":"🧋","Mocktails":"🍹","Ice Tea":"🧊",
   "Shakes":"🥤","Hot Beverages":"☕","Burger":"🍔",
-  "Sandwiches":"🥪","Vada Pav":"🫓","Pizza":"🍕",
-  "Fries":"🍟","Chinese":"🥡","Maggi":"🍜",
+  "Sandwiches":"🥪","Vada Pav":"🫓","Pizza":"🍕","Single Topping Pizza":"🍕",
+  "Fries & Munchies":"🍟","Chinese":"🥡","Maggi":"🍜",
   "Pasta":"🍝","Bread":"🍞","Wrap":"🌯",
   "Dessert":"🍨","Combos":"🎁",
 };
