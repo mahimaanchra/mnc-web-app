@@ -50,7 +50,11 @@ function cartKey(itemId, variantLabel) {
   return `${itemId}__${variantLabel || 'default'}`; 
 }
 function cartTotal(cart) {
-  return Object.values(cart).reduce((s, e) => s + e.price * e.qty, 0);
+  return Object.values(cart).reduce((s, e) => {
+    // Handle free streak items with price of 0
+    const itemPrice = e.isFreeStreak ? 0 : (e.price || 0);
+    return s + itemPrice * e.qty;
+  }, 0);
 }
 function cartCount(cart) {
   return Object.values(cart).reduce((s, e) => s + e.qty, 0);
@@ -971,10 +975,26 @@ function CheckoutModal({
 
   const handlePlaceOrder = async () => {
     setSubmitting(true);
+    setPhoneError("");
+    
+    console.log("🚀 Starting order submission...", {
+      isThisOrderReward,
+      effectiveCart: Object.keys(effectiveCart),
+      entries: entries.length,
+      total,
+      verifiedPhone
+    });
+
     try {
       // Validate that all items in cart are still in stock
       const outOfStockItems = [];
       entries.forEach(([key, cartItem]) => {
+        // Skip validation for free streak items
+        if (cartItem.isFreeStreak) {
+          console.log("✅ Free streak item detected:", cartItem.itemName);
+          return;
+        }
+
         const menuItem = items.find(item => item.id === cartItem.itemId);
         if (!menuItem) {
           outOfStockItems.push(cartItem.itemName);
@@ -989,6 +1009,7 @@ function CheckoutModal({
       });
       
       if (outOfStockItems.length > 0) {
+        console.error("❌ Out of stock items found:", outOfStockItems);
         setPhoneError(`Sorry, these items are no longer available: ${outOfStockItems.join(", ")}. Please remove them from your cart.`);
         setSubmitting(false);
         return;
@@ -1002,19 +1023,50 @@ function CheckoutModal({
       const finalTableNumber = isSpecialFilter ? "Takeaway" : 
                                (finalOrderMode === "takeaway" ? "Takeaway" : (localTable || "—"));
 
-      const orderItems = entries.map(([, e]) => ({
-        itemId:       e.itemId,
-        itemName:     e.itemName,
-        variantLabel: e.variantLabel,
-        price:        e.price,
-        qty:          e.qty,
-        addons:       e.addons ?? [],
-        isFreeStreak: e.isFreeStreak ?? false,
-        status:       "Pending", // Individual item status
-        addedAt:      new Date(),
-      }));
+      // Create order items with proper price validation for free items
+      const orderItems = entries.map(([, e]) => {
+        const itemPrice = e.isFreeStreak ? 0 : (e.price || 0);
+        
+        // Ensure price is a valid number
+        if (typeof itemPrice !== 'number' || isNaN(itemPrice)) {
+          throw new Error(`Invalid price for item ${e.itemName}: ${itemPrice}`);
+        }
 
-      await addDoc(collection(db, "orders"), {
+        console.log(`📦 Processing item: ${e.itemName}, Price: ${itemPrice}, Free: ${e.isFreeStreak || false}`);
+        
+        return {
+          itemId:       e.itemId,
+          itemName:     e.itemName,
+          variantLabel: e.variantLabel,
+          price:        itemPrice,
+          qty:          e.qty,
+          addons:       e.addons ?? [],
+          isFreeStreak: e.isFreeStreak ?? false,
+          status:       "Pending", // Individual item status
+          addedAt:      new Date(),
+        };
+      });
+
+      // Validate total price calculation
+      const calculatedTotal = orderItems.reduce((sum, item) => {
+        const itemTotal = (item.price || 0) * item.qty;
+        return sum + itemTotal;
+      }, 0);
+
+      console.log("💰 Price validation:", {
+        cartTotal: total,
+        calculatedTotal,
+        match: Math.abs(total - calculatedTotal) < 0.01, // Allow for floating point precision
+        freeItems: orderItems.filter(item => item.isFreeStreak),
+        paidItems: orderItems.filter(item => !item.isFreeStreak)
+      });
+
+      // Ensure total is a valid number (can be 0 for free-only orders)
+      if (typeof total !== 'number' || isNaN(total) || total < 0) {
+        throw new Error(`Invalid total price: ${total}`);
+      }
+
+      const orderPayload = {
         tableNumber:      finalTableNumber,
         orderMode:        finalOrderMode,
         items:            orderItems,
@@ -1025,11 +1077,18 @@ function CheckoutModal({
         isStreakOrder:    isThisOrderReward,
         isSpecialOrder:   isSpecialFilter,
         createdAt:        serverTimestamp(),
-      });
+      };
+
+      console.log("📄 Final order payload:", orderPayload);
+
+      await addDoc(collection(db, "orders"), orderPayload);
+
+      console.log("✅ Order successfully submitted to Firestore");
 
       if (verifiedPhone) {
         localStorage.setItem("verifiedPhone", verifiedPhone);
         await recordOrder(verifiedPhone);
+        console.log("✅ Loyalty record updated");
       }
 
       // Only save mode/table if not a special order - use SessionManager
@@ -1046,8 +1105,21 @@ function CheckoutModal({
       setStep("success");
       setTimeout(() => { onOrderPlaced(); }, 1800);
     } catch (err) {
-      console.error("Order failed:", err);
-      setPhoneError("Order could not be placed. Please try again.");
+      console.error("❌ Order submission failed:", err);
+      console.error("Error details:", {
+        message: err.message,
+        code: err.code,
+        stack: err.stack,
+        isThisOrderReward,
+        total,
+        cartEntries: entries,
+        orderPayload: entries.map(([, e]) => ({
+          itemName: e.itemName,
+          price: e.price,
+          isFreeStreak: e.isFreeStreak
+        }))
+      });
+      setPhoneError(`Order could not be placed: ${err.message || 'Unknown error'}. Please try again.`);
     } finally {
       setSubmitting(false);
     }

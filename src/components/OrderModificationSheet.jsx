@@ -17,7 +17,7 @@
  *   onClose     – fn() close the sheet
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   doc, updateDoc, arrayUnion, increment, serverTimestamp,
@@ -113,7 +113,11 @@ function ItemCustomizationModal({ item, onClose, onAdd }) {
     }));
   }, [item.variants]);
 
-  const [selectedVariant, setSelectedVariant] = useState(sanitizedVariants[0] ?? null);
+  const [selectedVariant, setSelectedVariant] = useState(() => {
+    const defaultVariant = sanitizedVariants[0] ?? null;
+    console.log("🎯 Setting default variant:", defaultVariant);
+    return defaultVariant;
+  });
   const [selectedAddons, setSelectedAddons] = useState([]);
   const [qty, setQty] = useState(1);
   const [imgErr, setImgErr] = useState(false);
@@ -129,8 +133,18 @@ function ItemCustomizationModal({ item, onClose, onAdd }) {
   const unitPrice = (selectedVariant?.price ?? 0) + addonTotal;
   const totalPrice = unitPrice * qty;
 
+  console.log("📊 ItemCustomizationModal state:", {
+    itemName: item.name,
+    sanitizedVariants,
+    selectedVariant,
+    selectedAddons,
+    qty,
+    unitPrice,
+    totalPrice
+  });
+
   return (
-    <div className="fixed inset-0 z-60 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+    <div className="fixed inset-0 z-70 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
       <motion.div
         initial={{ y: "100%", opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -260,11 +274,34 @@ function ItemCustomizationModal({ item, onClose, onAdd }) {
           <button
             type="button"
             onClick={() => {
-              if (!selectedVariant) return;
+              console.log("🔘 Add button clicked in customization modal", {
+                selectedVariant,
+                hasSelectedVariant: !!selectedVariant,
+                item: item.name,
+                qty,
+                unitPrice,
+                selectedAddons
+              });
+              
+              if (!selectedVariant) {
+                console.error("❌ No variant selected - cannot add item");
+                alert("Please select a size/variant before adding to order");
+                return;
+              }
+              
+              console.log("✅ Calling onAdd with data:", {
+                item, 
+                variant: selectedVariant, 
+                price: unitPrice, 
+                addons: selectedAddons, 
+                qty
+              });
+              
               onAdd({ item, variant: selectedVariant, price: unitPrice, addons: selectedAddons, qty });
               onClose();
             }}
-            className="flex-1 bg-amber-400 hover:bg-amber-300 text-[#1a1a1a] font-bold py-3.5 px-6 rounded-xl text-sm transition-colors shadow-md flex items-center justify-center gap-2"
+            disabled={!selectedVariant}
+            className="flex-1 bg-amber-400 hover:bg-amber-300 disabled:bg-gray-600 disabled:cursor-not-allowed text-[#1a1a1a] font-bold py-3.5 px-6 rounded-xl text-sm transition-colors shadow-md flex items-center justify-center gap-2"
           >
             <span>Add to Order</span>
             <ChevronRight size={16} />
@@ -279,13 +316,32 @@ function ItemCustomizationModal({ item, onClose, onAdd }) {
 
 function ModMenuTile({ item, onSelect }) {
   const [imgErr, setImgErr] = useState(false);
+  
   if (!item.inStock) return null;
 
   const basePrice = item.variants?.[0]?.price ?? 0;
 
+  const handleAddClick = useCallback((e) => {
+    e.stopPropagation();
+    console.log("🔥 Add button clicked for:", item.name);
+    
+    if (onSelect && typeof onSelect === 'function') {
+      onSelect(item);
+    } else {
+      console.error("❌ onSelect is not a function:", typeof onSelect);
+    }
+  }, [item, onSelect]);
+
+  const handleTileClick = useCallback(() => {
+    console.log("🔘 Tile clicked for:", item.name);
+    if (onSelect && typeof onSelect === 'function') {
+      onSelect(item);
+    }
+  }, [item, onSelect]);
+
   return (
     <div
-      onClick={() => onSelect(item)}
+      onClick={handleTileClick}
       className="bg-[#242424] border border-[#2e2e2e] rounded-xl overflow-hidden p-3.5 flex items-center justify-between gap-4 cursor-pointer hover:border-amber-300/40 transition-all active:scale-[0.99]"
     >
       <div className="flex items-center gap-3.5 min-w-0">
@@ -308,10 +364,7 @@ function ModMenuTile({ item, onSelect }) {
       <div className="flex-shrink-0">
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(item);
-          }}
+          onClick={handleAddClick}
           className="bg-amber-400 hover:bg-amber-300 text-[#1a1a1a] font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1 transition-colors shadow-sm"
         >
           <Plus size={14} className="stroke-[3]" />
@@ -332,6 +385,11 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
   const [error, setError]       = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activeCustomizeItem, setActiveCustomizeItem] = useState(null);
+  
+  // Track customization modal state
+  useEffect(() => {
+    console.log("🎭 activeCustomizeItem changed:", activeCustomizeItem?.name || "null");
+  }, [activeCustomizeItem]);
 
   const categories = useMemo(() => {
     const seen = new Set();
@@ -352,20 +410,43 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
   [menuItems, activeCategory]);
 
   const handleAddCustomizedItem = ({ item, variant, price, addons = [], qty = 1 }) => {
+    console.log("🍽️ Adding item to modification cart:", {
+      itemId: item.id,
+      itemName: item.name,
+      variant: variant.label,
+      price,
+      addons,
+      qty
+    });
+
     const key = modCartKey(item.id, variant.label, addons);
-    setModCart((prev) => ({
-      ...prev,
-      [key]: prev[key]
-        ? { ...prev[key], qty: prev[key].qty + qty }
-        : {
-            itemId: item.id,
-            itemName: item.name,
-            variantLabel: variant.label,
-            price,
-            qty,
-            addons: addons || [],
-          },
-    }));
+    
+    setModCart((prev) => {
+      const updatedCart = {
+        ...prev,
+        [key]: prev[key]
+          ? { ...prev[key], qty: prev[key].qty + qty }
+          : {
+              itemId: item.id,
+              itemName: item.name,
+              variantLabel: variant.label,
+              price,
+              qty,
+              addons: addons || [],
+            },
+      };
+      
+      console.log("🛒 Updated modification cart:", updatedCart);
+      console.log("📊 Cart totals after update:", {
+        count: modCartCount(updatedCart),
+        total: modCartTotal(updatedCart)
+      });
+      
+      return updatedCart;
+    });
+    
+    // Force component re-render
+    setCartUpdate(prev => prev + 1);
   };
 
   const handleUpdateQty = (key, delta) => {
@@ -375,19 +456,46 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
       const newQty = entry.qty + delta;
       if (newQty <= 0) {
         const { [key]: _, ...rest } = prev;
+        console.log("🗑️ Removing item from cart:", key);
         return rest;
       }
-      return { ...prev, [key]: { ...entry, qty: newQty } };
+      const updatedCart = { ...prev, [key]: { ...entry, qty: newQty } };
+      console.log("📊 Updated quantity:", { key, newQty, cartTotal: modCartTotal(updatedCart) });
+      return updatedCart;
     });
+    
+    // Force component re-render
+    setCartUpdate(prev => prev + 1);
   };
 
+  // Calculate cart values (no memoization to ensure immediate updates)
   const cartEntries = Object.entries(modCart);
-  const addedTotal  = modCartTotal(modCart);
-  const addedCount  = modCartCount(modCart);
+  const addedTotal = modCartTotal(modCart);
+  const addedCount = modCartCount(modCart);
   const newRunningTotal = (order.totalPrice ?? 0) + addedTotal;
 
+  console.log("🔄 Bottom bar state:", {
+    cartEntries: cartEntries.length,
+    addedCount,
+    addedTotal,
+    newRunningTotal,
+    modCart
+  });
+
   const handleConfirm = async () => {
-    if (addedCount === 0) return;
+    if (addedCount === 0) {
+      console.log("❌ Cannot confirm - no items added to modification cart");
+      return;
+    }
+    
+    console.log("🚀 Starting order modification...", {
+      orderId: order.id,
+      orderStatus: order.status,
+      addedCount,
+      addedTotal,
+      isModifiable
+    });
+    
     setSubmitting(true);
     setError("");
 
@@ -408,26 +516,51 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
         note:       note.trim() || null,
       };
 
-      await updateDoc(doc(db, "orders", order.id), {
+      console.log("📦 Modification payload:", modPayload);
+
+      const updateData = {
         modifications:   arrayUnion(modPayload),
         totalPrice:      increment(addedTotal),
         hasModification: true,
         lastModifiedAt:  serverTimestamp(),
-      });
+      };
 
+      console.log("🔄 Updating Firestore document:", order.id, updateData);
+
+      await updateDoc(doc(db, "orders", order.id), updateData);
+
+      console.log("✅ Order modification successful!");
+      
       setSuccess(true);
       setTimeout(() => {
         onClose();
       }, 2200);
     } catch (err) {
-      console.error("Modification failed:", err);
-      setError("Could not update your order. Please try again.");
+      console.error("❌ Modification failed:", err);
+      console.error("Error details:", {
+        message: err.message,
+        code: err.code,
+        stack: err.stack,
+        orderId: order.id,
+        orderStatus: order.status,
+        modPayload: cartEntries
+      });
+      setError(`Could not update your order: ${err.message || 'Unknown error'}. Please try again.`);
     } finally {
       setSubmitting(false);
     }
   };
 
   const isModifiable = order.status === "Open";
+  
+  console.log("📋 OrderModificationSheet initialized:", {
+    orderId: order.id,
+    orderStatus: order.status,
+    isModifiable,
+    tableNumber: order.tableNumber,
+    totalPrice: order.totalPrice,
+    hasModifications: order.hasModification
+  });
 
   return (
     <>
@@ -563,7 +696,11 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
                   </p>
                 ) : (
                   visibleItems.map((item) => (
-                    <ModMenuTile key={item.id} item={item} onSelect={setActiveCustomizeItem} />
+                    <ModMenuTile 
+                      key={item.id} 
+                      item={item} 
+                      onSelect={setActiveCustomizeItem} 
+                    />
                   ))
                 )}
               </div>
@@ -593,6 +730,7 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
               )}
 
               <button
+                key={`confirm-${addedCount}-${addedTotal}`}
                 type="button"
                 onClick={handleConfirm}
                 disabled={addedCount === 0 || submitting || !isModifiable}
@@ -623,11 +761,21 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
       {/* Pop-up Customization Modal */}
       <AnimatePresence>
         {activeCustomizeItem && (
-          <ItemCustomizationModal
-            item={activeCustomizeItem}
-            onClose={() => setActiveCustomizeItem(null)}
-            onAdd={handleAddCustomizedItem}
-          />
+          <>
+            {console.log("🎭 Rendering ItemCustomizationModal for item:", {
+              itemId: activeCustomizeItem.id,
+              itemName: activeCustomizeItem.name,
+              hasOnAdd: !!handleAddCustomizedItem
+            })}
+            <ItemCustomizationModal
+              item={activeCustomizeItem}
+              onClose={() => {
+                console.log("🚪 Closing customization modal");
+                setActiveCustomizeItem(null);
+              }}
+              onAdd={handleAddCustomizedItem}
+            />
+          </>
         )}
       </AnimatePresence>
     </>
