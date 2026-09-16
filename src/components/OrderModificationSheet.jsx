@@ -317,27 +317,39 @@ function ItemCustomizationModal({ item, onClose, onAdd }) {
 function ModMenuTile({ item, onSelect }) {
   const [imgErr, setImgErr] = useState(false);
   
-  if (!item.inStock) return null;
-
   const basePrice = item.variants?.[0]?.price ?? 0;
 
   const handleAddClick = useCallback((e) => {
     e.stopPropagation();
-    console.log("🔥 Add button clicked for:", item.name);
+    console.log("🔥 ModMenuTile - Add button clicked:", {
+      itemId: item.id,
+      itemName: item.name,
+      onSelectExists: !!onSelect,
+      onSelectType: typeof onSelect,
+      eventTarget: e.target,
+      eventCurrentTarget: e.currentTarget
+    });
     
     if (onSelect && typeof onSelect === 'function') {
+      console.log("✅ Calling onSelect for item:", item.name);
       onSelect(item);
     } else {
-      console.error("❌ onSelect is not a function:", typeof onSelect);
+      console.error("❌ onSelect is not a function:", {
+        onSelect,
+        type: typeof onSelect,
+        itemName: item.name
+      });
     }
   }, [item, onSelect]);
 
   const handleTileClick = useCallback(() => {
-    console.log("🔘 Tile clicked for:", item.name);
+    console.log("🔘 ModMenuTile - Tile clicked:", item.name);
     if (onSelect && typeof onSelect === 'function') {
       onSelect(item);
     }
   }, [item, onSelect]);
+
+  if (!item.inStock) return null;
 
   return (
     <div
@@ -365,7 +377,11 @@ function ModMenuTile({ item, onSelect }) {
         <button
           type="button"
           onClick={handleAddClick}
+          onMouseDown={(e) => console.log("🖱️ MouseDown on Add button:", item.name)}
+          onMouseUp={(e) => console.log("🖱️ MouseUp on Add button:", item.name)}
+          onTouchStart={(e) => console.log("📱 TouchStart on Add button:", item.name)}
           className="bg-amber-400 hover:bg-amber-300 text-[#1a1a1a] font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1 transition-colors shadow-sm"
+          style={{ position: 'relative', zIndex: 10, pointerEvents: 'auto' }}
         >
           <Plus size={14} className="stroke-[3]" />
           <span>Add</span>
@@ -386,10 +402,49 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
   const [activeCategory, setActiveCategory] = useState("All");
   const [activeCustomizeItem, setActiveCustomizeItem] = useState(null);
   
+  // Debug specific order ID
+  const isTargetOrder = order.id === "FekKhGEcEpSEpv3Ksh8V";
+  
+  if (isTargetOrder) {
+    console.log("🎯 TARGET ORDER DEBUG - OrderModificationSheet props:", {
+      orderId: order.id,
+      orderStatus: order.status,
+      tableNumber: order.tableNumber,
+      menuItemsCount: menuItems?.length || 0,
+      onCloseFn: typeof onClose,
+      orderObject: order
+    });
+  }
+  
+  // Create a wrapped setActiveCustomizeItem for debugging
+  const handleSetActiveCustomizeItem = useCallback((item) => {
+    if (isTargetOrder) {
+      console.log("🎯 TARGET ORDER - handleSetActiveCustomizeItem called:", {
+        itemId: item?.id,
+        itemName: item?.name,
+        hasVariants: !!item?.variants?.length,
+        timestamp: new Date().toISOString()
+      });
+    }
+    setActiveCustomizeItem(item);
+  }, [isTargetOrder]);
+  
   // Track customization modal state
   useEffect(() => {
-    console.log("🎭 activeCustomizeItem changed:", activeCustomizeItem?.name || "null");
-  }, [activeCustomizeItem]);
+    if (isTargetOrder) {
+      console.log("🎭 TARGET ORDER - activeCustomizeItem changed:", activeCustomizeItem?.name || "null");
+    }
+  }, [activeCustomizeItem, isTargetOrder]);
+  
+  // Track component lifecycle for target order
+  useEffect(() => {
+    if (isTargetOrder) {
+      console.log("🎬 TARGET ORDER - OrderModificationSheet MOUNTED");
+      return () => {
+        console.log("🔚 TARGET ORDER - OrderModificationSheet UNMOUNTING");
+      };
+    }
+  }, [isTargetOrder]);
 
   const categories = useMemo(() => {
     const seen = new Set();
@@ -403,21 +458,30 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
     return ["All", ...cats];
   }, [menuItems]);
 
-  const visibleItems = useMemo(() =>
-    menuItems.filter(
+  const visibleItems = useMemo(() => {
+    const filtered = menuItems.filter(
       (item) => item.inStock && (activeCategory === "All" || item.category === activeCategory),
-    ),
-  [menuItems, activeCategory]);
+    );
+    
+    if (isTargetOrder) {
+      console.log("🔍 TARGET ORDER - visibleItems calculated:", {
+        totalMenuItems: menuItems.length,
+        activeCategory,
+        filteredCount: filtered.length,
+        firstFewItems: filtered.slice(0, 3).map(item => ({
+          id: item.id,
+          name: item.name,
+          inStock: item.inStock,
+          category: item.category
+        }))
+      });
+    }
+    
+    return filtered;
+  }, [menuItems, activeCategory, isTargetOrder]);
 
   const handleAddCustomizedItem = ({ item, variant, price, addons = [], qty = 1 }) => {
-    console.log("🍽️ Adding item to modification cart:", {
-      itemId: item.id,
-      itemName: item.name,
-      variant: variant.label,
-      price,
-      addons,
-      qty
-    });
+    console.log("🍽️ Adding item to modification cart:", item.name);
 
     const key = modCartKey(item.id, variant.label, addons);
     
@@ -436,17 +500,9 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
             },
       };
       
-      console.log("🛒 Updated modification cart:", updatedCart);
-      console.log("📊 Cart totals after update:", {
-        count: modCartCount(updatedCart),
-        total: modCartTotal(updatedCart)
-      });
-      
+      console.log("🛒 Cart updated, total items:", modCartCount(updatedCart));
       return updatedCart;
     });
-    
-    // Force component re-render
-    setCartUpdate(prev => prev + 1);
   };
 
   const handleUpdateQty = (key, delta) => {
@@ -456,31 +512,17 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
       const newQty = entry.qty + delta;
       if (newQty <= 0) {
         const { [key]: _, ...rest } = prev;
-        console.log("🗑️ Removing item from cart:", key);
         return rest;
       }
-      const updatedCart = { ...prev, [key]: { ...entry, qty: newQty } };
-      console.log("📊 Updated quantity:", { key, newQty, cartTotal: modCartTotal(updatedCart) });
-      return updatedCart;
+      return { ...prev, [key]: { ...entry, qty: newQty } };
     });
-    
-    // Force component re-render
-    setCartUpdate(prev => prev + 1);
   };
 
-  // Calculate cart values (no memoization to ensure immediate updates)
+  // Calculate cart values immediately (no memoization for real-time updates)
   const cartEntries = Object.entries(modCart);
   const addedTotal = modCartTotal(modCart);
   const addedCount = modCartCount(modCart);
   const newRunningTotal = (order.totalPrice ?? 0) + addedTotal;
-
-  console.log("🔄 Bottom bar state:", {
-    cartEntries: cartEntries.length,
-    addedCount,
-    addedTotal,
-    newRunningTotal,
-    modCart
-  });
 
   const handleConfirm = async () => {
     if (addedCount === 0) {
@@ -551,16 +593,9 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
     }
   };
 
-  const isModifiable = order.status === "Open";
+  console.log("📋 OrderModificationSheet initialized for order:", order.id);
   
-  console.log("📋 OrderModificationSheet initialized:", {
-    orderId: order.id,
-    orderStatus: order.status,
-    isModifiable,
-    tableNumber: order.tableNumber,
-    totalPrice: order.totalPrice,
-    hasModifications: order.hasModification
-  });
+  const isModifiable = order.status === "Open";
 
   return (
     <>
@@ -598,13 +633,34 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
               </span>
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Debug button for target order */}
+            {isTargetOrder && (
+              <button
+                type="button"
+                onClick={() => {
+                  console.log("🧪 DEBUG BUTTON CLICKED for target order!");
+                  const testItem = { 
+                    id: "test", 
+                    name: "Test Item", 
+                    variants: [{ label: "Regular", price: 100 }],
+                    inStock: true
+                  };
+                  handleSetActiveCustomizeItem(testItem);
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded"
+              >
+                DEBUG
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {!isModifiable && (
@@ -695,13 +751,23 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
                     No items available in this category.
                   </p>
                 ) : (
-                  visibleItems.map((item) => (
-                    <ModMenuTile 
-                      key={item.id} 
-                      item={item} 
-                      onSelect={setActiveCustomizeItem} 
-                    />
-                  ))
+                  visibleItems.map((item) => {
+                    if (isTargetOrder) {
+                      console.log("🔧 TARGET ORDER - Rendering ModMenuTile:", {
+                        itemId: item.id,
+                        itemName: item.name,
+                        handlerExists: !!handleSetActiveCustomizeItem,
+                        handlerType: typeof handleSetActiveCustomizeItem
+                      });
+                    }
+                    return (
+                      <ModMenuTile 
+                        key={item.id} 
+                        item={item} 
+                        onSelect={handleSetActiveCustomizeItem} 
+                      />
+                    );
+                  })
                 )}
               </div>
 
@@ -730,7 +796,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
               )}
 
               <button
-                key={`confirm-${addedCount}-${addedTotal}`}
                 type="button"
                 onClick={handleConfirm}
                 disabled={addedCount === 0 || submitting || !isModifiable}
@@ -762,15 +827,17 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
       <AnimatePresence>
         {activeCustomizeItem && (
           <>
-            {console.log("🎭 Rendering ItemCustomizationModal for item:", {
+            {isTargetOrder && console.log("🎭 TARGET ORDER - Rendering ItemCustomizationModal:", {
               itemId: activeCustomizeItem.id,
               itemName: activeCustomizeItem.name,
-              hasOnAdd: !!handleAddCustomizedItem
+              hasHandleAddCustomizedItem: !!handleAddCustomizedItem
             })}
             <ItemCustomizationModal
               item={activeCustomizeItem}
               onClose={() => {
-                console.log("🚪 Closing customization modal");
+                if (isTargetOrder) {
+                  console.log("🚪 TARGET ORDER - Closing customization modal");
+                }
                 setActiveCustomizeItem(null);
               }}
               onAdd={handleAddCustomizedItem}
