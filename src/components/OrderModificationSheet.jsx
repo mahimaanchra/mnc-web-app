@@ -136,17 +136,6 @@ function ItemCustomizationModal({ item, onClose, onAdd }) {
   const unitPrice = (selectedVariant?.price ?? 0) + addonTotal;
   const totalPrice = unitPrice * qty;
 
-  console.log("📊 ItemCustomizationModal current state:", {
-    itemName: item.name,
-    selectedVariant: selectedVariant?.label || "none",
-    selectedVariantPrice: selectedVariant?.price || 0,
-    selectedAddons: selectedAddons.map(a => a.label),
-    qty,
-    unitPrice,
-    totalPrice,
-    canAdd: !!selectedVariant
-  });
-
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
       <motion.div
@@ -311,35 +300,13 @@ function ModMenuTile({ item, onSelect }) {
 
   const handleAddClick = useCallback((e) => {
     e.stopPropagation();
-    console.log("🔥 ModMenuTile - Add button clicked:", {
-      itemId: item.id,
-      itemName: item.name,
-      hasVariants: !!item.variants?.length,
-      variantCount: item.variants?.length || 0,
-      variants: item.variants?.map(v => ({ label: v.label, price: v.price })) || [],
-      onSelectExists: !!onSelect,
-      onSelectType: typeof onSelect,
-      eventTarget: e.target,
-      eventCurrentTarget: e.currentTarget
-    });
     
     if (onSelect && typeof onSelect === 'function') {
-      console.log("✅ Calling onSelect for item with variants:", {
-        itemName: item.name,
-        hasVariants: !!item.variants?.length
-      });
       onSelect(item);
-    } else {
-      console.error("❌ onSelect is not a function:", {
-        onSelect,
-        type: typeof onSelect,
-        itemName: item.name
-      });
     }
   }, [item, onSelect]);
 
   const handleTileClick = useCallback(() => {
-    console.log("🔘 ModMenuTile - Tile clicked:", item.name);
     if (onSelect && typeof onSelect === 'function') {
       onSelect(item);
     }
@@ -373,11 +340,7 @@ function ModMenuTile({ item, onSelect }) {
         <button
           type="button"
           onClick={handleAddClick}
-          onMouseDown={(e) => console.log("🖱️ MouseDown on Add button:", item.name)}
-          onMouseUp={(e) => console.log("🖱️ MouseUp on Add button:", item.name)}
-          onTouchStart={(e) => console.log("📱 TouchStart on Add button:", item.name)}
           className="bg-amber-400 hover:bg-amber-300 text-[#1a1a1a] font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1 transition-colors shadow-sm"
-          style={{ position: 'relative', zIndex: 10, pointerEvents: 'auto' }}
         >
           <Plus size={14} className="stroke-[3]" />
           <span>Add</span>
@@ -417,8 +380,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
   }, [menuItems, activeCategory]);
 
   const handleAddCustomizedItem = ({ item, variant, price, addons = [], qty = 1 }) => {
-    console.log("🍽️ Adding item to modification cart:", item.name);
-
     const key = modCartKey(item.id, variant.label, addons);
     
     setModCart((prev) => {
@@ -436,7 +397,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
             },
       };
       
-      console.log("🛒 Cart updated, total items:", modCartCount(updatedCart));
       return updatedCart;
     });
   };
@@ -461,18 +421,7 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
   const newRunningTotal = (order.totalPrice ?? 0) + addedTotal;
 
   const handleConfirm = async () => {
-    if (addedCount === 0) {
-      console.log("❌ Cannot confirm - no items added to modification cart");
-      return;
-    }
-    
-    console.log("🚀 Starting order modification...", {
-      orderId: order.id,
-      orderStatus: order.status,
-      addedCount,
-      addedTotal,
-      isModifiable
-    });
+    if (addedCount === 0) return;
     
     setSubmitting(true);
     setError("");
@@ -494,8 +443,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
         note:       note.trim() || null,
       };
 
-      console.log("📦 Modification payload:", modPayload);
-
       const updateData = {
         modifications:   arrayUnion(modPayload),
         totalPrice:      increment(addedTotal),
@@ -503,34 +450,20 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
         lastModifiedAt:  serverTimestamp(),
       };
 
-      console.log("🔄 Updating Firestore document:", order.id, updateData);
-
       await updateDoc(doc(db, "orders", order.id), updateData);
-
-      console.log("✅ Order modification successful!");
       
       setSuccess(true);
       setTimeout(() => {
         onClose();
       }, 2200);
     } catch (err) {
-      console.error("❌ Modification failed:", err);
-      console.error("Error details:", {
-        message: err.message,
-        code: err.code,
-        stack: err.stack,
-        orderId: order.id,
-        orderStatus: order.status,
-        modPayload: cartEntries
-      });
       setError(`Could not update your order: ${err.message || 'Unknown error'}. Please try again.`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  console.log("📋 OrderModificationSheet initialized for order:", order.id);
-  
+  // Order modification component initialization  
   const isModifiable = order.status === "Open";
 
   return (

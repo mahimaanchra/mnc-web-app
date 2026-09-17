@@ -2378,19 +2378,11 @@ export default function CustomerMenu() {
       {/* ── Order Modification Sheet ── */}
       <AnimatePresence>
         {modifyingOrder && (
-          <>
-            {console.log("🚀 CustomerMenu - Rendering OrderModificationSheet:", {
-              modifyingOrderId: modifyingOrder.id,
-              modifyingOrderStatus: modifyingOrder.status,
-              itemsCount: items?.length || 0,
-              isTargetOrder: modifyingOrder.id === "FekKhGEcEpSEpv3Ksh8V"
-            })}
-            <OrderModificationSheet
-              order={modifyingOrder}
-              menuItems={items}
-              onClose={() => setModifyingOrder(null)}
-            />
-          </>
+          <OrderModificationSheet
+            order={modifyingOrder}
+            menuItems={items}
+            onClose={() => setModifyingOrder(null)}
+          />
         )}
       </AnimatePresence>
         </div>
