@@ -113,14 +113,17 @@ function ItemCustomizationModal({ item, onClose, onAdd }) {
     }));
   }, [item.variants]);
 
-  const [selectedVariant, setSelectedVariant] = useState(() => {
-    const defaultVariant = sanitizedVariants[0] ?? null;
-    console.log("🎯 Setting default variant:", defaultVariant);
-    return defaultVariant;
-  });
+  const [selectedVariant, setSelectedVariant] = useState(null);
   const [selectedAddons, setSelectedAddons] = useState([]);
   const [qty, setQty] = useState(1);
   const [imgErr, setImgErr] = useState(false);
+
+  // Set default variant after sanitizedVariants is calculated
+  useEffect(() => {
+    if (sanitizedVariants.length > 0 && !selectedVariant) {
+      setSelectedVariant(sanitizedVariants[0]);
+    }
+  }, [sanitizedVariants, selectedVariant]);
 
   const toggleAddon = (addon) =>
     setSelectedAddons((prev) =>
@@ -133,18 +136,19 @@ function ItemCustomizationModal({ item, onClose, onAdd }) {
   const unitPrice = (selectedVariant?.price ?? 0) + addonTotal;
   const totalPrice = unitPrice * qty;
 
-  console.log("📊 ItemCustomizationModal state:", {
+  console.log("📊 ItemCustomizationModal current state:", {
     itemName: item.name,
-    sanitizedVariants,
-    selectedVariant,
-    selectedAddons,
+    selectedVariant: selectedVariant?.label || "none",
+    selectedVariantPrice: selectedVariant?.price || 0,
+    selectedAddons: selectedAddons.map(a => a.label),
     qty,
     unitPrice,
-    totalPrice
+    totalPrice,
+    canAdd: !!selectedVariant
   });
 
   return (
-    <div className="fixed inset-0 z-70 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
       <motion.div
         initial={{ y: "100%", opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -274,34 +278,20 @@ function ItemCustomizationModal({ item, onClose, onAdd }) {
           <button
             type="button"
             onClick={() => {
-              console.log("🔘 Add button clicked in customization modal", {
-                selectedVariant,
-                hasSelectedVariant: !!selectedVariant,
-                item: item.name,
-                qty,
-                unitPrice,
-                selectedAddons
-              });
-              
               if (!selectedVariant) {
-                console.error("❌ No variant selected - cannot add item");
                 alert("Please select a size/variant before adding to order");
                 return;
               }
-              
-              console.log("✅ Calling onAdd with data:", {
-                item, 
-                variant: selectedVariant, 
-                price: unitPrice, 
-                addons: selectedAddons, 
-                qty
-              });
               
               onAdd({ item, variant: selectedVariant, price: unitPrice, addons: selectedAddons, qty });
               onClose();
             }}
             disabled={!selectedVariant}
-            className="flex-1 bg-amber-400 hover:bg-amber-300 disabled:bg-gray-600 disabled:cursor-not-allowed text-[#1a1a1a] font-bold py-3.5 px-6 rounded-xl text-sm transition-colors shadow-md flex items-center justify-center gap-2"
+            className={`flex-1 font-bold py-3.5 px-6 rounded-xl text-sm transition-colors shadow-md flex items-center justify-center gap-2 ${
+              selectedVariant 
+                ? "bg-amber-400 hover:bg-amber-300 text-[#1a1a1a]"
+                : "bg-gray-600 cursor-not-allowed text-gray-300"
+            }`}
           >
             <span>Add to Order</span>
             <ChevronRight size={16} />
@@ -324,6 +314,9 @@ function ModMenuTile({ item, onSelect }) {
     console.log("🔥 ModMenuTile - Add button clicked:", {
       itemId: item.id,
       itemName: item.name,
+      hasVariants: !!item.variants?.length,
+      variantCount: item.variants?.length || 0,
+      variants: item.variants?.map(v => ({ label: v.label, price: v.price })) || [],
       onSelectExists: !!onSelect,
       onSelectType: typeof onSelect,
       eventTarget: e.target,
@@ -331,7 +324,10 @@ function ModMenuTile({ item, onSelect }) {
     });
     
     if (onSelect && typeof onSelect === 'function') {
-      console.log("✅ Calling onSelect for item:", item.name);
+      console.log("✅ Calling onSelect for item with variants:", {
+        itemName: item.name,
+        hasVariants: !!item.variants?.length
+      });
       onSelect(item);
     } else {
       console.error("❌ onSelect is not a function:", {
@@ -401,50 +397,6 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
   const [error, setError]       = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [activeCustomizeItem, setActiveCustomizeItem] = useState(null);
-  
-  // Debug specific order ID
-  const isTargetOrder = order.id === "FekKhGEcEpSEpv3Ksh8V";
-  
-  if (isTargetOrder) {
-    console.log("🎯 TARGET ORDER DEBUG - OrderModificationSheet props:", {
-      orderId: order.id,
-      orderStatus: order.status,
-      tableNumber: order.tableNumber,
-      menuItemsCount: menuItems?.length || 0,
-      onCloseFn: typeof onClose,
-      orderObject: order
-    });
-  }
-  
-  // Create a wrapped setActiveCustomizeItem for debugging
-  const handleSetActiveCustomizeItem = useCallback((item) => {
-    if (isTargetOrder) {
-      console.log("🎯 TARGET ORDER - handleSetActiveCustomizeItem called:", {
-        itemId: item?.id,
-        itemName: item?.name,
-        hasVariants: !!item?.variants?.length,
-        timestamp: new Date().toISOString()
-      });
-    }
-    setActiveCustomizeItem(item);
-  }, [isTargetOrder]);
-  
-  // Track customization modal state
-  useEffect(() => {
-    if (isTargetOrder) {
-      console.log("🎭 TARGET ORDER - activeCustomizeItem changed:", activeCustomizeItem?.name || "null");
-    }
-  }, [activeCustomizeItem, isTargetOrder]);
-  
-  // Track component lifecycle for target order
-  useEffect(() => {
-    if (isTargetOrder) {
-      console.log("🎬 TARGET ORDER - OrderModificationSheet MOUNTED");
-      return () => {
-        console.log("🔚 TARGET ORDER - OrderModificationSheet UNMOUNTING");
-      };
-    }
-  }, [isTargetOrder]);
 
   const categories = useMemo(() => {
     const seen = new Set();
@@ -459,26 +411,10 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
   }, [menuItems]);
 
   const visibleItems = useMemo(() => {
-    const filtered = menuItems.filter(
+    return menuItems.filter(
       (item) => item.inStock && (activeCategory === "All" || item.category === activeCategory),
     );
-    
-    if (isTargetOrder) {
-      console.log("🔍 TARGET ORDER - visibleItems calculated:", {
-        totalMenuItems: menuItems.length,
-        activeCategory,
-        filteredCount: filtered.length,
-        firstFewItems: filtered.slice(0, 3).map(item => ({
-          id: item.id,
-          name: item.name,
-          inStock: item.inStock,
-          category: item.category
-        }))
-      });
-    }
-    
-    return filtered;
-  }, [menuItems, activeCategory, isTargetOrder]);
+  }, [menuItems, activeCategory]);
 
   const handleAddCustomizedItem = ({ item, variant, price, addons = [], qty = 1 }) => {
     console.log("🍽️ Adding item to modification cart:", item.name);
@@ -633,34 +569,13 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
               </span>
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Debug button for target order */}
-            {isTargetOrder && (
-              <button
-                type="button"
-                onClick={() => {
-                  console.log("🧪 DEBUG BUTTON CLICKED for target order!");
-                  const testItem = { 
-                    id: "test", 
-                    name: "Test Item", 
-                    variants: [{ label: "Regular", price: 100 }],
-                    inStock: true
-                  };
-                  handleSetActiveCustomizeItem(testItem);
-                }}
-                className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded"
-              >
-                DEBUG
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors"
-            >
-              <X size={18} />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-[#9a9a9a] hover:text-white hover:bg-[#2e2e2e] transition-colors"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {!isModifiable && (
@@ -694,9 +609,9 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto relative">
               {cartEntries.length > 0 && (
-                <div className="sticky top-0 z-10 bg-[#1e1e1e] border-b border-[#f5a623]/20 px-4 py-3">
+                <div className="sticky top-0 z-20 bg-[#1e1e1e] border-b border-[#f5a623]/20 px-4 py-3 relative">
                   <p className="text-[#f5a623] text-xs font-bold uppercase tracking-wider mb-2">
                     Items to Add ({addedCount})
                   </p>
@@ -723,7 +638,7 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
                 </div>
               )}
 
-              <div className="overflow-x-auto scrollbar-hide border-b border-[#2e2e2e]">
+              <div className="overflow-x-auto scrollbar-hide border-b border-[#2e2e2e] relative z-10">
                 <div className="flex gap-2 px-4 py-3 w-max">
                   {categories.map((cat) => (
                     <button
@@ -745,36 +660,26 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
                 </div>
               </div>
 
-              <div className="px-4 py-4 space-y-2.5">
+              <div className="px-4 py-4 space-y-2.5 relative z-5">
                 {visibleItems.length === 0 ? (
                   <p className="text-[#9a9a9a] text-sm text-center py-8">
                     No items available in this category.
                   </p>
                 ) : (
-                  visibleItems.map((item) => {
-                    if (isTargetOrder) {
-                      console.log("🔧 TARGET ORDER - Rendering ModMenuTile:", {
-                        itemId: item.id,
-                        itemName: item.name,
-                        handlerExists: !!handleSetActiveCustomizeItem,
-                        handlerType: typeof handleSetActiveCustomizeItem
-                      });
-                    }
-                    return (
-                      <ModMenuTile 
-                        key={item.id} 
-                        item={item} 
-                        onSelect={handleSetActiveCustomizeItem} 
-                      />
-                    );
-                  })
+                  visibleItems.map((item) => (
+                    <ModMenuTile 
+                      key={item.id} 
+                      item={item} 
+                      onSelect={setActiveCustomizeItem} 
+                    />
+                  ))
                 )}
               </div>
 
               <div className="h-32" />
             </div>
 
-            <div className="flex-shrink-0 border-t border-[#2e2e2e] px-4 pt-3 pb-safe bg-[#1e1e1e]"
+            <div className="flex-shrink-0 border-t border-[#2e2e2e] px-4 pt-3 pb-safe bg-[#1e1e1e] relative z-30"
                  style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom, 20px))" }}>
               {error && (
                 <p className="text-red-400 text-xs mb-2 flex items-center gap-1">
@@ -824,25 +729,14 @@ export default function OrderModificationSheet({ order, menuItems, onClose }) {
       </motion.div>
 
       {/* Pop-up Customization Modal */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {activeCustomizeItem && (
-          <>
-            {isTargetOrder && console.log("🎭 TARGET ORDER - Rendering ItemCustomizationModal:", {
-              itemId: activeCustomizeItem.id,
-              itemName: activeCustomizeItem.name,
-              hasHandleAddCustomizedItem: !!handleAddCustomizedItem
-            })}
-            <ItemCustomizationModal
-              item={activeCustomizeItem}
-              onClose={() => {
-                if (isTargetOrder) {
-                  console.log("🚪 TARGET ORDER - Closing customization modal");
-                }
-                setActiveCustomizeItem(null);
-              }}
-              onAdd={handleAddCustomizedItem}
-            />
-          </>
+          <ItemCustomizationModal
+            key={`modal-${activeCustomizeItem.id}`}
+            item={activeCustomizeItem}
+            onClose={() => setActiveCustomizeItem(null)}
+            onAdd={handleAddCustomizedItem}
+          />
         )}
       </AnimatePresence>
     </>
