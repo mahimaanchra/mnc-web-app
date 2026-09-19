@@ -28,6 +28,7 @@ import {
   PackageX, Plus,
 } from "lucide-react";
 import SessionManager from "../utils/sessionManager";
+import { useLoyalty } from "../hooks/useLoyalty";
 
 // ─── Status badge config ───────────────────────────────────────────────────────
 
@@ -100,16 +101,11 @@ function StatusBadge({ status }) {
 
 function groupOrdersByDate(orders) {
   const groups = {};
-  const now = new Date();
-  const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
   
   orders.forEach(order => {
     if (!order.createdAt?.toDate) return;
     
     const date = order.createdAt.toDate();
-    
-    // Filter to only last 7 days
-    if (date < sevenDaysAgo) return;
     
     const dateKey = date.toLocaleDateString('en-GB', { 
       day: '2-digit', 
@@ -129,10 +125,11 @@ function groupOrdersByDate(orders) {
     groups[dateKey].orders.push(order);
   });
   
-  // Sort groups by date (most recent first) and limit to 7 days with actual orders
+  // Sort groups by date (most recent first) and limit to last 7 DAYS WITH ORDERS
+  // This means only days that actually have orders count towards the 7-day limit
   return Object.values(groups)
     .sort((a, b) => b.fullDate - a.fullDate)
-    .slice(0, 7);
+    .slice(0, 7); // Only 7 most recent days that have orders
 }
 
 // ─── Individual order item for clean item-level re-ordering ─────────────────────────────────────────
@@ -375,6 +372,9 @@ export default function OrderTracker({
   // Ref so the session-wipe check inside onSnapshot sees the current orders list
   // without needing it in the effect's dependency array.
   const ordersRef = useRef([]);
+  
+  // Use loyalty hook for streak reset functionality
+  const { resetStreak } = useLoyalty();
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -383,7 +383,9 @@ export default function OrderTracker({
   useEffect(() => {
     if (!phone) return;
 
-    const cutoff = Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days
+    // Fetch more data (30 days) to ensure we can find last 7 days with actual orders
+    // The groupOrdersByDate function will then filter to only 7 days with orders
+    const cutoff = Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const q = query(
       collection(db, "orders"),
       where("customerPhone", "==", phone),
@@ -406,6 +408,24 @@ export default function OrderTracker({
       const hadActive   = prevOrders.some((o) => o.status === "Open");
       const nowHasActive = scoped.some((o) => o.status === "Open");
       
+      // Check for streak order completion (isStreakOrder changed from non-Completed to Completed)
+      const newlyCompletedStreakOrders = scoped.filter(newOrder => {
+        const prevOrder = prevOrders.find(po => po.id === newOrder.id);
+        return newOrder.isStreakOrder && 
+               newOrder.status === "Completed" && 
+               prevOrder && 
+               prevOrder.status !== "Completed";
+      });
+      
+      // Reset streak for each newly completed streak order
+      if (newlyCompletedStreakOrders.length > 0 && phone) {
+        console.log('🎁 Streak order completed, resetting streak for:', phone);
+        newlyCompletedStreakOrders.forEach(order => {
+          console.log(`🔄 Resetting streak for completed order ${order.id}`);
+          resetStreak(phone);
+        });
+      }
+      
       // Use SessionManager for comprehensive reset
       if (hadActive && !nowHasActive) {
         console.log('🔄 OrderTracker: Order completed, triggering session reset');
@@ -416,7 +436,7 @@ export default function OrderTracker({
     });
 
     return unsub;
-  }, [phone]);
+  }, [phone, resetStreak]);
 
   // Active = most recent Open order (orders can have items in various states)
   const activeOrder = orders.find(

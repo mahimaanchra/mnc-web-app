@@ -68,8 +68,8 @@ export function useLoyalty() {
         prev = data.completedOrders ?? 0;
       }
 
-      // Increment; if we just hit the streak target, the next cycle starts at 0
-      const next = prev + 1 >= STREAK_TARGET ? 0 : prev + 1;
+      // Just increment normally - don't reset here, reset when order completes
+      const next = prev + 1;
 
       await setDoc(
         ref,
@@ -90,6 +90,35 @@ export function useLoyalty() {
     }
   }, []);
 
+  // ── Reset streak after completing a streak order ─────────────────────────
+  const resetStreak = useCallback(async (rawPhone) => {
+    const key = sanitisePhone(rawPhone);
+    if (!key || key.length < 10) return 0;
+    
+    try {
+      const ref = doc(db, "loyalty_profiles", key);
+      const snap = await getDoc(ref);
+      
+      if (snap.exists()) {
+        await setDoc(
+          ref,
+          { 
+            completedOrders: 0, // Reset to 0 after completing streak order
+            updatedAt: serverTimestamp() 
+          },
+          { merge: true }
+        );
+        
+        setCompletedOrders(0);
+        console.log("🔄 Streak reset after completing streak order");
+        return 0;
+      }
+    } catch (err) {
+      console.error("useLoyalty resetStreak error:", err);
+    }
+    return 0;
+  }, []);
+
   // ── How many steps until the free reward? ─────────────────────────────────
   const stepsRemaining = STREAK_TARGET - completedOrders;
   const isRewardOrder  = completedOrders + 1 === STREAK_TARGET;
@@ -101,5 +130,6 @@ export function useLoyalty() {
     isRewardOrder,
     fetchProfile,
     recordOrder,
+    resetStreak,
   };
 }
