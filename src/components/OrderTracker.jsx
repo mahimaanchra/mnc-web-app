@@ -433,6 +433,8 @@ export default function OrderTracker({
       }
 
       setOrders(scoped);
+    }, (err) => {
+      console.error("OrderTracker orders snapshot error:", err);
     });
 
     return unsub;

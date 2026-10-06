@@ -11,6 +11,7 @@ import {
   PackageX, ArrowLeft, CheckCircle2, ChevronRight, ChevronDown,
   Phone, Loader2, TableProperties, Gift,
   ClipboardList, PlusCircle, ShoppingBag,
+  AlertTriangle, RotateCcw,
 } from "lucide-react";
 import { useLoyalty, STREAK_TARGET } from "../hooks/useLoyalty";
 import OrderTracker from "../components/OrderTracker";
@@ -1954,6 +1955,8 @@ export default function CustomerMenu() {
   // Menu state with cache validation
   const [items,          setItems]          = useState([]);
   const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState(null);
+  const [retryCount,     setRetryCount]     = useState(0);
   const [activeCategory, setActiveCategory] = useState("All");
   const [cart,           setCart]           = useState({});
   const [cartOpen,       setCartOpen]       = useState(false);
@@ -1970,34 +1973,68 @@ export default function CustomerMenu() {
     setActiveOrder(order);
   }, []);
 
-  // Firestore listener with cache validation
+  // Firestore listener with cache validation and robust error handling
   useEffect(() => {
-    return onSnapshot(collection(db, "menu_items"), (snap) => {
-      const freshItems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setItems(freshItems);
-      setLoading(false);
-      
-      // Validate cart against fresh menu data to remove stale items
-      setCart(prevCart => {
-        const validatedCart = {};
-        Object.entries(prevCart).forEach(([key, cartItem]) => {
-          const menuItem = freshItems.find(item => item.id === cartItem.itemId);
-          if (menuItem) {
-            // Check if variant still exists and is in stock
-            if (cartItem.variantLabel && cartItem.variantLabel !== 'Regular') {
-              const variant = menuItem.variants?.find(v => v.label === cartItem.variantLabel);
-              if (variant && variant.inStock !== false) {
+    setLoading(true);
+    setError(null);
+
+    // Hydrate immediately from cache if available so UI is instant
+    try {
+      const cached = localStorage.getItem("mnc_cached_menu_items");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setItems(parsed);
+          setLoading(false);
+        }
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+
+    const unsub = onSnapshot(
+      collection(db, "menu_items"),
+      (snap) => {
+        const freshItems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setItems(freshItems);
+        setLoading(false);
+        setError(null);
+
+        try {
+          localStorage.setItem("mnc_cached_menu_items", JSON.stringify(freshItems));
+        } catch (e) {
+          // ignore storage quota errors
+        }
+        
+        // Validate cart against fresh menu data to remove stale items
+        setCart(prevCart => {
+          const validatedCart = {};
+          Object.entries(prevCart).forEach(([key, cartItem]) => {
+            const menuItem = freshItems.find(item => item.id === cartItem.itemId);
+            if (menuItem) {
+              // Check if variant still exists and is in stock
+              if (cartItem.variantLabel && cartItem.variantLabel !== 'Regular') {
+                const variant = menuItem.variants?.find(v => v.label === cartItem.variantLabel);
+                if (variant && variant.inStock !== false) {
+                  validatedCart[key] = cartItem;
+                }
+              } else if (menuItem.inStock) {
                 validatedCart[key] = cartItem;
               }
-            } else if (menuItem.inStock) {
-              validatedCart[key] = cartItem;
             }
-          }
+          });
+          return validatedCart;
         });
-        return validatedCart;
-      });
-    });
-  }, []);
+      },
+      (err) => {
+        console.error("Firestore onSnapshot error:", err);
+        setLoading(false);
+        setError(err);
+      }
+    );
+
+    return () => unsub();
+  }, [retryCount]);
 
   // Clean cart of out-of-stock items when menu updates
   useEffect(() => {
@@ -2198,6 +2235,23 @@ export default function CustomerMenu() {
 
       <main className="p-responsive pb-20 space-y-responsive">
 
+        {/* Cached / Offline mode banner */}
+        {error && items.length > 0 && (
+          <div className="mb-4 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between text-xs text-amber-200">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle size={16} className="text-amber-400 shrink-0" />
+              <span>Showing cached menu. Real-time updates currently paused ({error.code === 'permission-denied' ? 'permission restricted' : 'network issue'}).</span>
+            </div>
+            <button
+              onClick={() => setRetryCount(c => c + 1)}
+              className="inline-flex items-center gap-1 font-semibold text-amber-400 hover:text-white px-2 py-1 rounded bg-amber-400/10 hover:bg-amber-400/20 transition-colors ml-2 shrink-0"
+            >
+              <RotateCcw size={12} />
+              Retry
+            </button>
+          </div>
+        )}
+
         {!loading && items.length > 0 && (
           <div className="flex items-center justify-end mb-4">
             <button onClick={() => setShowOutOfStock((v) => !v)}
@@ -2232,7 +2286,30 @@ export default function CustomerMenu() {
           </div>
         )}
 
-        {!loading && items.length === 0 && (
+        {/* Backend Error State */}
+        {!loading && error && items.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center max-w-md mx-auto">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4 text-amber-400">
+              <AlertTriangle size={32} />
+            </div>
+            <h2 className="text-white font-semibold text-lg mb-2">Unable to Load Menu</h2>
+            <p className="text-[#9a9a9a] text-sm mb-5 leading-relaxed">
+              {error.code === "permission-denied"
+                ? "Access denied by Firebase. The Firestore security rules for database 'mnc-cafe-db' may have expired (test mode) or require public read permission."
+                : `Could not connect to database (${error.message || "Network Error"}). Please check your connection and try again.`}
+            </p>
+            <button
+              onClick={() => setRetryCount(c => c + 1)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#f5a623] hover:bg-[#e08a00] text-[#1a1a1a] font-semibold text-sm transition-colors shadow-lg shadow-[#f5a623]/20"
+            >
+              <RotateCcw size={15} />
+              Retry Connection
+            </button>
+          </div>
+        )}
+
+        {/* Empty state when query succeeded but 0 items exist */}
+        {!loading && !error && items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-28 text-center">
             <div className="w-20 h-20 rounded-2xl bg-[#242424] border border-[#2e2e2e]
                             flex items-center justify-center mb-5">

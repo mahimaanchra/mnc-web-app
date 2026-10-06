@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Menu Items ──────────────────────────────────────────────────────────
+    // Customers scanning QR codes need public read access to browse the menu.
+    // Only authenticated cafe staff / admin can add, update, or remove items.
+    match /menu_items/{itemId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // ── Orders ──────────────────────────────────────────────────────────────
+    // Customers can place orders, view order status, and modify/add items to active orders.
+    // Only authenticated staff / admin can delete order records.
+    match /orders/{orderId} {
+      allow read, create, update: if true;
+      allow delete: if request.auth != null;
+    }
+
+    // ── Loyalty Profiles ────────────────────────────────────────────────────
+    // Customers look up and track their reward streak using their phone number.
+    match /loyalty_profiles/{phone} {
+      allow read, write: if true;
+    }
+  }
+}

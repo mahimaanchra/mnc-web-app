@@ -697,43 +697,56 @@ export default function AdminMenu() {
 
   // Firestore Menu Listener
   useEffect(() => {
-    return onSnapshot(collection(db, "menu_items"), (snap) => {
-      setItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    return onSnapshot(
+      collection(db, "menu_items"),
+      (snap) => {
+        setItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => {
+        console.error("AdminMenu menu_items snapshot error:", err);
+      }
+    );
   }, []);
 
   // Firestore Orders Listener with Audio Notification
   useEffect(() => {
     const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, (snap) => {
-      const fetchedOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const fetchedOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-      if (!initialLoadRef.current) {
-        snap.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const newOrder = change.doc.data();
-            if (newOrder.status === "Open") {
-              // Play single loud alert for new orders
-              resumeAudioCtx();
-              playOrderChime();
+        if (!initialLoadRef.current) {
+          snap.docChanges().forEach((change) => {
+            if (change.type === "added") {
+              const newOrder = change.doc.data();
+              if (newOrder.status === "Open") {
+                // Play single loud alert for new orders
+                resumeAudioCtx();
+                playOrderChime();
+              }
             }
-          }
-          // Play distinct alert when a customer adds items to an existing order
-          if (change.type === "modified") {
-            const updatedOrder = change.doc.data();
-            if (updatedOrder.hasModification) {
-              resumeAudioCtx();
-              playModificationChime();
+            // Play distinct alert when a customer adds items to an existing order
+            if (change.type === "modified") {
+              const updatedOrder = change.doc.data();
+              if (updatedOrder.hasModification) {
+                resumeAudioCtx();
+                playModificationChime();
+              }
             }
-          }
-        });
-      } else {
-        initialLoadRef.current = false;
+          });
+        } else {
+          initialLoadRef.current = false;
+        }
+
+        setOrders(fetchedOrders);
+        setOrdersLoading(false);
+      },
+      (err) => {
+        console.error("AdminMenu orders snapshot error:", err);
+        setOrdersLoading(false);
       }
-
-      setOrders(fetchedOrders);
-      setOrdersLoading(false);
-    });
+    );
   }, []);
 
   useEffect(() => {
