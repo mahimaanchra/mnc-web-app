@@ -252,10 +252,21 @@ const sanitizeItem = (form) => ({
 
 function timeAgo(ts) {
   if (!ts) return "";
-  const secs = Math.floor((Date.now() - ts.toMillis()) / 1000);
-  if (secs < 60)  return `${secs}s ago`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  return `${Math.floor(secs / 3600)}h ago`;
+  const millis = typeof ts.toMillis === "function"
+    ? ts.toMillis()
+    : (typeof ts.toDate === "function"
+        ? ts.toDate().getTime()
+        : (ts instanceof Date
+            ? ts.getTime()
+            : (typeof ts === "number"
+                ? ts
+                : (ts ? new Date(ts).getTime() : null))));
+  if (!millis || isNaN(millis)) return "";
+  const secs = Math.floor((Date.now() - millis) / 1000);
+  if (secs < 60)   return `${Math.max(0, secs)}s ago`;
+  if (secs < 3600)  return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return `${Math.floor(secs / 86400)}d ago`;
 }
 
 // ─── Sub-Components ─────────────────────────────────────────────────────────────
@@ -554,7 +565,7 @@ function OrderCard({ order, onStatusChange, onItemStatusChange, isUpdating }) {
         
         {/* Time Elapsed */}
         <div className="text-sm font-medium text-gray-500">
-          {timeAgo(order.createdAt)}
+          {timeAgo(order.status === "Completed" ? (order.completedAt || order.createdAt) : order.createdAt)}
         </div>
       </div>
 
